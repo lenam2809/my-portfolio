@@ -1,11 +1,13 @@
 "use client";
 
-import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { usePathname, useRouter } from "@/i18n/routing";
+import { useLocale, useTranslations } from "next-intl";
+import { useEffect, useState, useTransition } from "react";
 
-import { Fade, Flex, Line, Row, ToggleButton } from "@once-ui-system/core";
+import { Fade, Flex, Line, Row, ToggleButton, Column, Avatar, Text, Icon, IconButton } from "@once-ui-system/core";
+import { useParams } from "next/navigation";
 
-import { routes, display, person, about, blog, work, gallery } from "@/resources";
+import { routes, display, person, about, blog, work, gallery, social } from "@/resources";
 import { ThemeToggle } from "./ThemeToggle";
 import styles from "./Header.module.scss";
 
@@ -43,7 +45,25 @@ const TimeDisplay: React.FC<TimeDisplayProps> = ({ timeZone, locale = "en-GB" })
 export default TimeDisplay;
 
 export const Header = () => {
-  const pathname = usePathname() ?? "";
+  const router = useRouter();
+  const [activePath, setActivePath] = useState("/");
+  const pathname = usePathname();
+  const params = useParams();
+  const t = useTranslations("Nav");
+  const tPerson = useTranslations("Person");
+
+  const locale = (params?.locale as string) || "vi";
+
+  useEffect(() => {
+    setActivePath(pathname);
+  }, [pathname]);
+
+  const handleLanguageChange = (newLocale: string) => {
+    // pathname from next-intl router is already stripped of locale prefix
+    // e.g., on /vi/work/slug, pathname is "/work/slug"
+    // router.push with locale option will add the new locale prefix
+    router.push(pathname, { locale: newLocale });
+  };
 
   return (
     <>
@@ -73,7 +93,11 @@ export const Header = () => {
         }}
       >
         <Row paddingLeft="12" fillWidth vertical="center" textVariant="body-default-s">
-          {display.location && <Row s={{ hide: true }}>{person.location}</Row>}
+          {display.location && (
+            <Row s={{ hide: true }}>
+              {person.location && <>{tPerson('location')}</>}
+            </Row>
+          )}
         </Row>
         <Row fillWidth horizontal="center">
           <Row
@@ -87,7 +111,9 @@ export const Header = () => {
           >
             <Row gap="4" vertical="center" textVariant="body-default-s" suppressHydrationWarning>
               {routes["/"] && (
-                <ToggleButton prefixIcon="home" href="/" selected={pathname === "/"} />
+                <ToggleButton prefixIcon="home" href={`/${locale}`} selected={pathname === "/"}>
+                  {t('home')}
+                </ToggleButton>
               )}
               <Line background="neutral-alpha-medium" vert maxHeight="24" />
               {routes["/about"] && (
@@ -95,15 +121,15 @@ export const Header = () => {
                   <Row s={{ hide: true }}>
                     <ToggleButton
                       prefixIcon="person"
-                      href="/about"
-                      label={about.label}
+                      href={`/${locale}/about`}
+                      label={t('about')}
                       selected={pathname === "/about"}
                     />
                   </Row>
                   <Row hide s={{ hide: false }}>
                     <ToggleButton
                       prefixIcon="person"
-                      href="/about"
+                      href={`/${locale}/about`}
                       selected={pathname === "/about"}
                     />
                   </Row>
@@ -114,15 +140,15 @@ export const Header = () => {
                   <Row s={{ hide: true }}>
                     <ToggleButton
                       prefixIcon="grid"
-                      href="/work"
-                      label={work.label}
+                      href={`/${locale}/work`}
+                      label={t('work')}
                       selected={pathname.startsWith("/work")}
                     />
                   </Row>
                   <Row hide s={{ hide: false }}>
                     <ToggleButton
                       prefixIcon="grid"
-                      href="/work"
+                      href={`/${locale}/work`}
                       selected={pathname.startsWith("/work")}
                     />
                   </Row>
@@ -133,15 +159,15 @@ export const Header = () => {
                   <Row s={{ hide: true }}>
                     <ToggleButton
                       prefixIcon="book"
-                      href="/blog"
-                      label={blog.label}
+                      href={`/${locale}/blog`}
+                      label={t('blog')}
                       selected={pathname.startsWith("/blog")}
                     />
                   </Row>
                   <Row hide s={{ hide: false }}>
                     <ToggleButton
                       prefixIcon="book"
-                      href="/blog"
+                      href={`/${locale}/blog`}
                       selected={pathname.startsWith("/blog")}
                     />
                   </Row>
@@ -152,29 +178,44 @@ export const Header = () => {
                   <Row s={{ hide: true }}>
                     <ToggleButton
                       prefixIcon="gallery"
-                      href="/gallery"
-                      label={gallery.label}
+                      href={`/${locale}/gallery`}
+                      label={t('gallery')}
                       selected={pathname.startsWith("/gallery")}
                     />
                   </Row>
                   <Row hide s={{ hide: false }}>
                     <ToggleButton
                       prefixIcon="gallery"
-                      href="/gallery"
+                      href={`/${locale}/gallery`}
                       selected={pathname.startsWith("/gallery")}
                     />
                   </Row>
                 </>
               )}
-              {display.themeSwitcher && (
-                <>
-                  <Line background="neutral-alpha-medium" vert maxHeight="24" />
-                  <ThemeToggle />
-                </>
-              )}
-            </Row>
-          </Row>
-        </Row>
+              <Line background="neutral-alpha-medium" vert maxHeight="24" />
+              <ToggleButton
+                prefixIcon="vi"
+                label={t("switch.vi")}
+                selected={locale === "vi"}
+                onClick={() => handleLanguageChange("vi")}
+              />
+              <ToggleButton
+                prefixIcon="en"
+                label={t("switch.en")}
+                selected={locale === "en"}
+                onClick={() => handleLanguageChange("en")}
+              />
+              {
+                display.themeSwitcher && (
+                  <>
+                    <Line background="neutral-alpha-medium" vert maxHeight="24" />
+                    <ThemeToggle />
+                  </>
+                )
+              }
+            </Row >
+          </Row >
+        </Row >
         <Flex fillWidth horizontal="end" vertical="center">
           <Flex
             paddingRight="12"
@@ -184,11 +225,11 @@ export const Header = () => {
             gap="20"
           >
             <Flex s={{ hide: true }}>
-              {display.time && <TimeDisplay timeZone={person.location} />}
+              {display.time && <TimeDisplay timeZone={person.location} locale={locale} />}
             </Flex>
           </Flex>
         </Flex>
-      </Row>
+      </Row >
     </>
   );
 };

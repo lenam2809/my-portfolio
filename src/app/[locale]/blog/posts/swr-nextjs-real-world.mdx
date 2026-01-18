@@ -1,0 +1,612 @@
+---
+title: "SWR trong dự án Next.js thực tế: Data Fetching & Caching"
+subtitle: "Tối ưu state management và data fetching với SWR"
+summary: "Hướng dẫn sử dụng SWR (stale-while-revalidate) trong dự án Next.js thực tế. Bao gồm custom hooks, optimistic updates, error handling, và integration với authentication."
+image: "/images/gallery/vertical-3.jpg"
+publishedAt: "2025-01-05"
+tag: "Frontend"
+---
+
+## SWR là gì?
+
+**SWR** = **Stale-While-Revalidate** - HTTP caching strategy được Vercel phát triển thành React hooks library.
+
+### Strategy explained:
+1. **Return cached data first** (stale) → UI fast
+2. **Fetch fresh data** in background (revalidate)
+3. **Update UI** với data mới
+
+## Tại sao dùng SWR?
+
+**So với useState + useEffect**:
+
+```typescript
+// ❌ Traditional approach - Repetitive, error-prone
+function ProductsList() {
+  const [products, setProducts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    setLoading(true);
+    fetch('/api/products')
+      .then(res => res.json())
+      .then(data => {
+        setProducts(data);
+        setLoading(false);
+      })
+      .catch(err => {
+        setError(err);
+        setLoading(false);
+      });
+  }, []);
+
+  if (loading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+  return <div>{/* render products */}</div>;
+}
+```
+
+```typescript
+// ✅ SWR approach - Clean, powerful
+import useSWR from 'swr';
+
+function ProductsList() {
+  const { data: products, error, isLoading } = useSWR('/api/products', fetcher);
+
+  if (isLoading) return <div>Loading...</div>;
+  if (error) return <div>Error: {error.message}</div>;
+  return <div>{/* render products */}</div>;
+}
+```
+
+**Benefits**:
+- ✅ Automatic caching
+- ✅ Automatic revalidation
+- ✅ Focus regain refetch
+- ✅ Network status refetch
+- ✅ Deduplication (same key = 1 request)
+- ✅ Pagination support
+- ✅ TypeScript support
+
+## Setup
+
+```bash
+npm install swr
+```
+
+**Global fetcher** (lib/api/fetcher.ts):
+```typescript
+import axios from 'axios';
+
+export const fetcher = async (url: string) => {
+  const response = await axios.get(url);
+  return response.data.data; // Extract data from API response wrapper
+};
+
+// With params
+export const fetcherWithParams = async ([url, params]: [string, any]) => {
+  const response = await axios.get(url, { params });
+  return response.data.data;
+};
+```
+
+**SWR Provider** (app/providers.tsx):
+```typescript
+'use client';
+
+import { SWRConfig } from 'swr';
+import { fetcher } from '@/lib/api/fetcher';
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  return (
+    <SWRConfig
+      value={{
+        fetcher,
+        revalidateOnFocus: false,
+        revalidateOnReconnect: true,
+        dedupingInterval: 5000,
+        errorRetryCount: 3,
+        shouldRetryOnError: true,
+      }}
+    >
+      {children}
+    </SWRConfig>
+  );
+}
+```
+
+## Basic Usage
+
+### Simple GET request
+
+```typescript
+import useSWR from 'swr';
+
+function Profile() {
+  const { data, error, isLoading } = useSWR('/api/user/profile');
+
+  if (isLoading) return <ProfileSkeleton />;
+  if (error) return <ErrorMessage error={error} />;
+  
+  return <ProfileCard user={data} />;
+}
+```
+
+### With Parameters
+
+```typescript
+function ProductsList({ categoryId }: { categoryId: number }) {
+  const { data, error, isLoading } = useSWR(
+    ['/api/products', { categoryId, page: 1, size: 10 }],
+    ([url, params]) => fetcherWithParams([url, params])
+  );
+
+  return (/* ... */);
+}
+```
+
+### Conditional Fetching
+
+```typescript
+function UserSettings({ userId }: { userId: number | null }) {
+  // Only fetch if userId is available
+  const { data } = useSWR(
+    userId ? `/api/users/${userId}/settings` : null
+  );
+
+  return (/* ... */);
+}
+```
+
+## Custom Hooks Pattern
+
+### useProducts Hook
+
+**lib/hooks/useProducts.ts**:
+```typescript
+import useSWR from 'swr';
+import { productsService } from '@/lib/api/products.service';
+import type { ProductDto, PaginatedResponse } from '@/lib/types/api';
+
+interface UseProductsOptions {
+  pageNumber?: number;
+  pageSize?: number;
+  searchTerm?: string;
+  categoryId?: number;
+  sortBy?: string;
+  sortDesc?: boolean;
+}
+
+export function useProducts(options: UseProductsOptions = {}) {
+  const {
+    pageNumber = 1,
+    pageSize = 12,
+    searchTerm,
+    categoryId,
+    sortBy = 'name',
+    sortDesc = false,
+  } = options;
+
+  const { data, error, mutate, isLoading } = useSWR<PaginatedResponse<ProductDto>>(
+    ['/api/products', { pageNumber, pageSize, searchTerm, categoryId, sortBy, sortDesc }],
+    ([url, params]) => productsService.getAll(params),
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 10000, // 10 seconds
+    }
+  );
+
+  return {
+    products: data,
+    isLoading,
+    isError: error,
+    mutate,
+  };
+}
+
+export function useProduct(id: number | null) {
+  const { data, error, mutate, isLoading } = useSWR<ProductDto>(
+    id ? `/api/products/${id}` : null,
+    () => id ? productsService.getById(id) : null
+  );
+
+  return {
+    product: data,
+    isLoading,
+    isError: error,
+    mutate,
+  };
+}
+```
+
+**Usage**:
+```typescript
+'use client';
+
+function ProductsPage() {
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+
+  const { products, isLoading, mutate } = useProducts({
+    pageNumber: page,
+    searchTerm: search,
+  });
+
+  return (/* ... */);
+}
+```
+
+## Mutations & Optimistic Updates
+
+### Manual Mutation
+
+```typescript
+import { mutate } from 'swr';
+
+async function deleteProduct(id: number) {
+  await axios.delete(`/api/products/${id}`);
+  
+  // Revalidate products list
+  mutate('/api/products');
+}
+```
+
+### Optimistic Update
+
+```typescript
+async function updateProduct(id: number, updates: Partial<ProductDto>) {
+  // Current data
+  const { data: products } = useSWR<ProductDto[]>('/api/products');
+
+  // Optimistic update - UI updates immediately
+  mutate(
+    '/api/products',
+    products.map(p => p.id === id ? { ...p, ...updates } : p),
+    false // Don't revalidate yet
+  );
+
+  try {
+    // Send request to server
+    await productsService.update(id, updates);
+    
+    // Revalidate to ensure consistency
+    mutate('/api/products');
+  } catch (error) {
+    // Rollback on error
+    mutate('/api/products');
+    toast.error('Update failed');
+  }
+}
+```
+
+### useSWRMutation for Write Operations
+
+```typescript
+import useSWRMutation from 'swr/mutation';
+
+async function createProductRequest(url: string, { arg }: { arg: CreateProductDto }) {
+  return await productsService.create(arg);
+}
+
+function CreateProductForm() {
+  const { trigger, isMutating } = useSWRMutation(
+    '/api/products',
+    createProductRequest
+  );
+
+  const handleSubmit = async (data: CreateProductDto) => {
+    try {
+      const newProduct = await trigger(data);
+      
+      // Update products list cache
+      mutate('/api/products');
+      
+      toast.success('Product created');
+      router.push(`/products/${newProduct.id}`);
+    } catch (error) {
+      toast.error('Failed to create product');
+    }
+  };
+
+  return (
+    <form onSubmit={handleSubmit}>
+      {/* form fields */}
+      <button type="submit" disabled={isMutating}>
+        {isMutating ? 'Creating...' : 'Create Product'}
+      </button>
+    </form>
+  );
+}
+```
+
+## Authentication Integration
+
+**useAuth Hook**:
+```typescript
+import useSWR from 'swr';
+import { authService } from '@/lib/api/auth.service';
+import type { AuthResponse, LoginRequest } from '@/lib/types/api';
+
+export function useAuth() {
+  const {
+    data: user,
+    error,
+    mutate,
+    isLoading,
+  } = useSWR<AuthResponse | null>('/api/auth/user', async () => {
+    try {
+      return await authService.getCurrentUser();
+    } catch {
+      return null;
+    }
+  });
+
+  const login = async (credentials: LoginRequest) => {
+    const authResponse = await authService.login(credentials);
+    
+    // Update cache
+    mutate(authResponse, false);
+    
+    return authResponse;
+  };
+
+  const logout = async () => {
+    await authService.logout();
+    
+    // Clear all SWR cache
+    mutate(null, false);
+  };
+
+  return {
+    user,
+    isLoading,
+    isError: error,
+    isAuthenticated: !!user && !error,
+    login,
+    logout,
+  };
+}
+```
+
+**Protected Route Component**:
+```typescript
+'use client';
+
+import { useAuth } from '@/lib/hooks/useAuth';
+import { redirect } from 'next/navigation';
+
+export function ProtectedRoute({ children }: { children: React.ReactNode }) {
+  const { user, isLoading } = useAuth();
+
+  if (isLoading) return <LoadingScreen />;
+  
+  if (!user) {
+    redirect('/login');
+  }
+
+  return <>{children}</>;
+}
+```
+
+## Infinite Loading / Pagination
+
+**useSWRInfinite**:
+```typescript
+import useSWRInfinite from 'swr/infinite';
+
+function ProductsInfiniteList() {
+  const getKey = (pageIndex: number, previousPageData: any) => {
+    // Reached the end
+    if (previousPageData && !previousPageData.hasNextPage) return null;
+    
+    // First page
+    return `/api/products?page=${pageIndex + 1}&size=20`;
+  };
+
+  const { data, error, size, setSize, isLoading } = useSWRInfinite(
+    getKey,
+    fetcher
+  );
+
+  const products = data ? data.flatMap(page => page.items) : [];
+  const isLoadingMore = isLoading || (size > 0 && data && typeof data[size - 1] === 'undefined');
+  const isEmpty = data?.[0]?.items.length === 0;
+  const isReachingEnd = isEmpty || (data && !data[data.length - 1]?.hasNextPage);
+
+  return (
+    <div>
+      {products.map(product => (
+        <ProductCard key={product.id} product={product} />
+      ))}
+      
+      {!isReachingEnd && (
+        <button 
+          onClick={() => setSize(size + 1)}
+          disabled={isLoadingMore}
+        >
+          {isLoadingMore ? 'Loading...' : 'Load More'}
+        </button>
+      )}
+    </div>
+  );
+}
+```
+
+## Error Handling & Retry
+
+### Global Error Handler
+
+```typescript
+<SWRConfig
+  value={{
+    onError: (error, key) => {
+      if (error.status === 401) {
+        // Redirect to login
+        window.location.href = '/login';
+      } else if (error.status === 403) {
+        toast.error('Access denied');
+      } else if (error.status >= 500) {
+        toast.error('Server error. Please try again later.');
+      }
+
+      // Log to monitoring service
+      console.error('SWR Error:', key, error);
+    },
+    shouldRetryOnError: (error) => {
+      // Don't retry on 4xx errors
+      return error.status >= 500;
+    },
+    errorRetryCount: 3,
+    errorRetryInterval: 5000,
+  }}
+>
+  {children}
+</SWRConfig>
+```
+
+### Component-level Error Handling
+
+```typescript
+function ProductDetails({ id }: { id: number }) {
+  const { product, isError } = useProduct(id);
+
+  if (isError) {
+    return (
+      <ErrorBoundary
+        fallback={<div>Failed to load product. <button onClick={() => mutate()}>Retry</button></div>}
+      />
+    );
+  }
+
+  return <ProductCard product={product} />;
+}
+```
+
+## Performance Optimization
+
+### 1. Deduplication
+
+SWR automatically deduplicates requests with same key:
+```typescript
+// Only 1 request sent, even with multiple components
+function Component1() {
+  useSWR('/api/products'); // Request sent
+}
+
+function Component2() {
+  useSWR('/api/products'); // Reuses result
+}
+
+function Component3() {
+  useSWR('/api/products'); // Reuses result
+}
+```
+
+### 2. Prefetching
+
+```typescript
+import { mutate } from 'swr';
+
+function ProductLink({ id }: { id: number }) {
+  const prefetch = () => {
+    mutate(`/api/products/${id}`, productsService.getById(id));
+  };
+
+  return (
+    <Link
+      href={`/products/${id}`}
+      onMouseEnter={prefetch} // Prefetch on hover
+    >
+      View Product
+    </Link>
+  );
+}
+```
+
+### 3. Dependent Fetching
+
+```typescript
+function UserOrders({ userId }: { userId: number }) {
+  const { data: user } = useSWR(`/api/users/${userId}`);
+  
+  // Only fetch orders after user is loaded
+  const { data: orders } = useSWR(
+    user ? `/api/users/${user.id}/orders` : null
+  );
+
+  return (/* ... */);
+}
+```
+
+## Real-World Example
+
+**E-commerce Product Page**:
+```typescript
+'use client';
+
+import { useProduct } from '@/lib/hooks/useProducts';
+import { useCart } from '@/lib/hooks/useCart';
+import useSWRMutation from 'swr/mutation';
+
+export function ProductPage({ id }: { id: number }) {
+  const { product, isLoading, isError } = useProduct(id);
+  const { mutate: updateCart } = useCart();
+
+  const { trigger: addToCart, isMutating } = useSWRMutation(
+    '/api/cart/items',
+    async (url, { arg }: { arg: { productId: number; quantity: number } }) => {
+      const result = await cartService.addItem(arg);
+      
+      // Optimistically update cart count
+      updateCart();
+      
+      return result;
+    }
+  );
+
+  if (isLoading) return <ProductSkeleton />;
+  if (isError) return <ErrorMessage />;
+
+  return (
+    <div>
+      <h1>{product.name}</h1>
+      <p>{product.description}</p>
+      <span>${product.price}</span>
+      
+      <button
+        onClick={() => addToCart({ productId: id, quantity: 1 })}
+        disabled={isMutating}
+      >
+        {isMutating ? 'Adding...' : 'Add to Cart'}
+      </button>
+    </div>
+  );
+}
+```
+
+## Best Practices
+
+✅ **DO**:
+- Use SWR for all data fetching
+- Create custom hooks for reusability
+- Implement optimistic updates for better UX
+- Configure global options in SWRConfig
+- Use TypeScript for type safety
+
+❌ **DON'T**:
+- Mix SWR with useState for same data
+- Forget to handle loading/error states
+- Over-revalidate (performance hit)
+- Use SWR for write-only operations
+
+## Kết luận
+
+SWR transforms data fetching trong React/Next.js apps:
+- 🚀 **Better UX** - Instant UI updates with stale data
+- 💾 **Smart Caching** - Automatic deduplication
+- 🔄 **Auto Sync** - Keep data fresh với revalidation
+- 🎯 **Simple API** - Clean, declarative code
+- ⚡ **Performance** - Optimistic updates và prefetching
+
+Essential tool cho modern Next.js development!

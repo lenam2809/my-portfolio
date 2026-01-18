@@ -1,0 +1,257 @@
+---
+title: "Car Sales Backend API"
+subtitle: "Clean Architecture foundation for automotive e-commerce"
+summary: "ASP.NET Core 8 RESTful API designed with Clean Architecture, providing a scalable, maintainable foundation for a car sales platform."
+image: "/images/gallery/horizontal-3.jpg"
+publishedAt: "2024-10-18"
+tag: "Backend API"
+---
+
+## Overview
+
+A backend API for a car sales platform built with Clean Architecture principles. This project emphasizes architectural best practices, code quality, and creating a foundation that's ready for feature expansion.
+
+## Technology Stack
+
+- **ASP.NET Core 8.0** - Latest .NET web framework
+- **Clean Architecture** - Layered architecture with clear dependencies
+- **Entity Framework Core** - ORM for data persistence
+- **SQL Server** - Relational database
+- **Swagger / OpenAPI** - API documentation
+- **FluentValidation** - Input validation
+- **Serilog** - Structured logging
+
+## Architecture Design
+
+### Layer Structure
+
+```
+CarSales.API/
+├── Domain/              # Enterprise business rules
+│   ├── Entities/        # Core domain entities
+│   ├── ValueObjects/    # Domain value objects
+│   └── Interfaces/      # Repository contracts
+│
+├── Application/         # Application business rules
+│   ├── DTOs/           # Data transfer objects
+│   ├── Interfaces/      # Service contracts
+│   ├── Validators/      # FluentValidation rules
+│   └── Services/        # Business logic services
+│
+├── Infrastructure/      # External concerns
+│   ├── Data/           # EF Core DbContext
+│   ├── Repositories/    # Repository implementations
+│   └── Services/        # External service integrations
+│
+└── API/                # Presentation layer
+    ├── Controllers/     # API endpoints
+    ├── Middleware/      # Custom middleware
+    └── Filters/         # Action filters
+```
+
+### Dependency Flow
+```
+API → Application → Domain
+         ↓
+   Infrastructure → Domain
+```
+
+Key principle: **Dependencies point inward**. Domain layer has no dependencies. Application depends only on Domain. Infrastructure depends on Domain and Application.
+
+## Core Features
+
+### 1. Vehicle Management
+- **CRUD Operations** for vehicles
+- Vehicle specifications (make, model, year, mileage, price)
+- Image management
+- Inventory tracking
+- Status management (Available, Sold, Reserved)
+
+### 2. Search & Filter
+- Search by make, model, price range
+- Filter by year, mileage, fuel type
+- Sorting capabilities
+- Pagination support
+
+### 3. Category Management
+- Vehicle types (Sedan, SUV, Truck, etc.)
+- Make and model hierarchies
+- Feature categorization
+
+### 4. RESTful API Design
+- Resource-based endpoints
+- Proper HTTP verbs (GET, POST, PUT, DELETE)
+- Standard status codes
+- Consistent response format
+- API versioning ready
+
+## Clean Architecture Benefits
+
+### 1. Testability
+- Business logic isolated from frameworks
+- Easy to unit test without dependencies
+- Mockable interfaces
+- Test-driven development friendly
+
+### 2. Independence
+- **Framework Independence**: Can switch from EF Core to Dapper
+- **Database Independence**: Can migrate from SQL Server to PostgreSQL
+- **UI Independence**: Same API can serve web, mobile, desktop
+- **External Service Independence**: Easy to swap third-party services
+
+### 3. Maintainability
+- Clear separation of concerns
+- Easy to locate and modify features
+- Reduced coupling
+- Single Responsibility Principle throughout
+
+### 4. Scalability
+- Easy to add new features
+- Modular structure
+- Can extract layers into microservices if needed
+- Ready for horizontal scaling
+
+## API Endpoints
+
+### Vehicles
+```
+GET    /api/vehicles              # Get all vehicles (paginated)
+GET    /api/vehicles/{id}         # Get vehicle by ID
+POST   /api/vehicles              # Create new vehicle
+PUT    /api/vehicles/{id}         # Update vehicle
+DELETE /api/vehicles/{id}         # Delete vehicle
+GET    /api/vehicles/search       # Search vehicles
+```
+
+### Categories
+```
+GET    /api/categories            # Get all categories
+POST   /api/categories            # Create category
+```
+
+## Code Quality Features
+
+### 1. FluentValidation
+```csharp
+public class CreateVehicleValidator : AbstractValidator<CreateVehicleDto>
+{
+    public CreateVehicleValidator()
+    {
+        RuleFor(x => x.Make).NotEmpty().MaximumLength(50);
+        RuleFor(x => x.Model).NotEmpty().MaximumLength(50);
+        RuleFor(x => x.Year).InclusiveBetween(1900, DateTime.Now.Year + 1);
+        RuleFor(x => x.Price).GreaterThan(0);
+    }
+}
+```
+
+### 2. Repository Pattern
+```csharp
+public interface IVehicleRepository
+{
+    Task<Vehicle> GetByIdAsync(int id);
+    Task<IEnumerable<Vehicle>> GetAllAsync();
+    Task<Vehicle> AddAsync(Vehicle vehicle);
+    Task UpdateAsync(Vehicle vehicle);
+    Task DeleteAsync(int id);
+}
+```
+
+### 3. Service Layer
+```csharp
+public class VehicleService : IVehicleService
+{
+    private readonly IVehicleRepository _repository;
+    private readonly IMapper _mapper;
+    
+    public async Task<VehicleDto> CreateVehicleAsync(CreateVehicleDto dto)
+    {
+        // Business logic here
+    }
+}
+```
+
+### 4. Global Exception Handling
+Custom middleware for consistent error responses:
+```csharp
+{
+    "statusCode": 400,
+    "message": "Validation failed",
+    "errors": { ... }
+}
+```
+
+### 5. Logging
+Structured logging with Serilog:
+- Request/Response logging
+- Error logging
+- Performance logging
+- Contextual information
+
+## Design Decisions
+
+### Why Clean Architecture?
+- **Long-term maintainability** over quick development
+- **Team scalability** - clear structure for multiple developers
+- **Future-proof** - easy to adapt to changing requirements
+- **Best practices** - industry-proven patterns
+
+### Why Repository Pattern?
+- **Abstraction** over data access
+- **Testability** - easy to mock data layer
+- **Flexibility** - can change ORM without affecting business logic
+
+### Why Service Layer?
+- **Business logic encapsulation**
+- **Reusability** across different presentations
+- **Transaction management**
+
+## Performance Considerations
+
+- **AsNoTracking** for read-only queries
+- **Eager loading** vs **Lazy loading** strategies
+- **Projection** to reduce data transfer
+- **Compiled queries** for frequently-used queries
+- **Connection pooling** configured
+- **Response caching** ready to implement
+
+## Security Features
+
+- Input validation on all endpoints
+- SQL injection protection (parameterized queries)
+- CORS configuration
+- Authentication ready (Identity framework)
+- Authorization policies ready for implementation
+
+## Documentation
+
+- **Swagger UI** for interactive API documentation
+- **XML comments** on controllers and models
+- **README** with setup instructions
+- **Architecture Decision Records** (ADRs)
+
+## Future Enhancements
+
+The architecture is designed to easily accommodate:
+
+- **Authentication & Authorization** - JWT, Identity
+- **Advanced Search** - ElasticSearch integration
+- **File Storage** - Azure Blob, AWS S3
+- **Caching** - Redis, In-Memory cache
+- **Messaging** - RabbitMQ, Azure Service Bus
+- **Payment Processing** - Stripe, PayPal
+- **Notifications** - Email, SMS via third-party services
+- **Reporting** - PDF generation, Analytics
+- **Admin Dashboard** - Separate API or Frontend integration
+
+## Key Takeaways
+
+1. **Clean Architecture works**: Provides excellent foundation for growth
+2. **Initial overhead pays off**: More code upfront, but easier maintenance
+3. **Clear boundaries matter**: Well-defined layers prevent confusion
+4. **Don't over-engineer**: Implement what you need, design for what might come
+5. **Documentation is crucial**: Architecture is only valuable if the team understands it
+
+## Conclusion
+
+This project demonstrates that investing time in proper architecture creates a robust foundation for future development. The clear separation of concerns and adherence to SOLID principles make the codebase maintainable, testable, and ready for expansion.

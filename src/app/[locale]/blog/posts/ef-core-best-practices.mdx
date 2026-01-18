@@ -1,0 +1,641 @@
+---
+title: "Entity Framework Core Best Practices: Performance & Clean Code"
+subtitle: "Tối ưu EF Core cho production applications"
+summary: "Hướng dẫn best practices cho Entity Framework Core: DbContext configuration, query optimization, migrations strategies, và common pitfalls. Bao gồm performance benchmarks và code examples từ dự án thực tế."
+image: "/images/gallery/horizontal-4.jpg"
+publishedAt: "2025-01-03"
+tag: "Database"
+---
+
+## DbContext Configuration
+
+### 1. DbContext Lifetime
+
+**❌ BAD - DbContext as Singleton**:
+```csharp
+// DON'T DO THIS!
+builder.Services.AddSingleton<ApplicationDbContext>();
+```
+
+**✅ GOOD - Scoped Lifetime**:
+```csharp
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+{
+    options.UseSqlServer(connectionString);
+}, ServiceLifetime.Scoped);
+```
+
+**Why Scoped?**
+- DbContext tracks changes → Not thread-safe
+- Connection pooling handled by ADO.NET
+- New context per request prevents memory leaks
+
+### 2. Connection String Configuration
+
+```csharp
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+{
+    var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+    
+    options.UseSqlServer(connectionString, sqlOptions =>
+    {
+        sqlOptions.EnableRetryOnFailure(
+            maxRetryCount: 5,
+            maxRetryDelay: TimeSpan.FromSeconds(30),
+            errorNumbersToAdd: null
+        );
+        
+        sqlOptions.CommandTimeout(30); // 30 seconds
+    });
+
+    // Development only
+    if (builder.Environment.IsDevelopment())
+    {
+        options.EnableSensitiveDataLogging();
+        options.EnableDetailedErrors();
+    }
+});
+```
+
+### 3. Model Configuration
+
+**Fluent API vs Data Annotations**:
+
+```csharp
+// ✅ PREFERRED - Fluent API in separate configuration classes
+public class ProductConfiguration : IEntityTypeConfiguration<Product>
+{
+    public void Configure(EntityTypeBuilder<Product> builder)
+    {
+        builder.ToTable("Products");
+        
+        builder.HasKey(p => p.Id);
+        
+        builder.Property(p => p.Name)
+            .IsRequired()
+            .HasMaxLength(100);
+            
+        builder.Property(p => p.Price)
+            .HasColumnType("decimal(18,2)")
+            .IsRequired();
+            
+        builder.HasOne(p => p.Category)
+            .WithMany(c => c.Products)
+            .HasForeignKey(p => p.CategoryId)
+            .OnDelete(DeleteBehavior.Restrict);
+            
+        builder.HasIndex(p => p.CategoryId);
+        builder.HasIndex(p => p.Name);
+    }
+}
+```
+
+**Apply Configurations**:
+```csharp
+protected override void OnModelCreating(ModelBuilder modelBuilder)
+{
+    // Apply all configurations from assembly
+    modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
+    
+    base.OnModelCreating(modelBuilder);
+}
+```
+
+## Query Optimization
+
+### 1. AsNoTracking for Read-Only Queries
+
+```csharp
+// ❌ BAD - Unnecessary change tracking
+public async Task<List<ProductDto>> GetProducts()
+{
+    return await _context.Products
+        .Select(p => new ProductDto { ... })
+        .ToListAsync();
+}
+
+// ✅ GOOD - No tracking for read-only
+public async Task<List<ProductDto>> GetProducts()
+{
+    return await _context.Products
+        .AsNoTracking()
+        .Select(p => new ProductDto { ... })
+        .ToListAsync();
+}
+```
+
+**Performance**: 30-40% faster!
+
+### 2. Select Only What You Need
+
+```csharp
+// ❌ BAD - Load entire entity with relations
+var products = await _context.Products
+    .Include(p => p.Category)
+    .Include(p => p.Brand)
+    .ToListAsync();
+
+// ✅ GOOD - Project to DTO
+var products = await _context.Products
+    .AsNoTracking()
+    .Select(p => new ProductDto
+    {
+        Id = p.Id,
+        Name = p.Name,
+        Price = p.Price,
+        CategoryName = p.Category.Name,
+        BrandName = p.Brand.Name
+    })
+    .ToListAsync();
+```
+
+**Generated SQL**:
+```sql
+-- Bad: SELECT p.*, c.*, b.* FROM Products p JOIN ...
+-- Good: SELECT p.Id, p.Name, p.Price, c.Name, b.Name FROM Products p JOIN ...
+```
+
+### 3. Avoid N+1 Queries
+
+**❌ BAD - N+1 Problem**:
+```csharp
+var categories = await _context.Categories.ToListAsync();
+
+foreach (var category in categories)
+{
+    // SEPARATE query for each category!
+    var productCount = await _context.Products
+        .CountAsync(p => p.CategoryId == category.Id);
+    
+    category.ProductCount = productCount;
+}
+```
+
+**✅ GOOD - Single Query with GroupBy**:
+```csharp
+var categoriesWithCount = await _context.Categories
+    .AsNoTracking()
+    .Select(c => new CategoryDto
+    {
+        Id = c.Id,
+        Name = c.Name,
+        ProductCount = c.Products.Count()
+    })
+    .ToListAsync();
+```
+
+### 4. Split Queries for Collections
+
+```csharp
+// Can cause cartesian explosion with multiple collections
+var orders = await _context.Orders
+    .Include(o => o.OrderItems)
+    .Include(o => o.Payments)
+    .ToListAsync();
+
+// ✅ BETTER - Split into multiple queries
+var orders = await _context.Orders
+    .Include(o => o.OrderItems)
+    .Include(o => o.Payments)
+    .AsSplitQuery() // Important!
+    .ToListAsync();
+```
+
+**AsSplitQuery** generates separate SQL queries to avoid cartesian explosion.
+
+### 5. Compiled Queries
+
+For frequently executed queries:
+
+```csharp
+private static readonly Func<ApplicationDbContext, int, Task<Product>> 
+    GetProductByIdCompiled = EF.CompileAsyncQuery(
+        (ApplicationDbContext context, int id) =>
+            context.Products
+                .AsNoTracking()
+                .FirstOrDefault(p => p.Id == id)
+    );
+
+public async Task<Product> GetProductById(int id)
+{
+    return await GetProductByIdCompiled(_context, id);
+}
+```
+
+**Performance boost**: 5-10% faster on repeated executions.
+
+## Migrations Best Practices
+
+### 1. Migration Commands
+
+```bash
+# Create migration
+dotnet ef migrations add InitialCreate
+
+# Update database
+dotnet ef database update
+
+# Remove last migration (if not applied)
+dotnet ef migrations remove
+
+# Generate SQL script
+dotnet ef migrations script
+
+# Revert to specific migration
+dotnet ef database update PreviousMigration
+```
+
+### 2. Seed Data
+
+**Configuration-based Seeding**:
+```csharp
+public class CategoryConfiguration : IEntityTypeConfiguration<Category>
+{
+    public void Configure(EntityTypeBuilder<Category> builder)
+    {
+        // ... other configurations
+        
+        builder.HasData(
+            new Category { Id = 1, Name = "Electronics" },
+            new Category { Id = 2, Name = "Clothing" },
+            new Category { Id = 3, Name = "Books" }
+        );
+    }
+}
+```
+
+**Manual Seeding on Startup** (Development):
+```csharp
+public static class DatabaseSeeder
+{
+    public static async Task SeedAsync(ApplicationDbContext context)
+    {
+        if (!await context.Categories.AnyAsync())
+        {
+            var categories = new List<Category>
+            {
+                new() { Name = "Electronics" },
+                new() { Name = "Clothing" },
+                new() { Name = "Books" }
+            };
+
+            await context.Categories.AddRangeAsync(categories);
+            await context.SaveChangesAsync();
+        }
+    }
+}
+
+// In Program.cs
+using (var scope = app.Services.CreateScope())
+{
+    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    
+    if (app.Environment.IsDevelopment())
+    {
+        await context.Database.MigrateAsync(); // Apply migrations
+        await DatabaseSeeder.SeedAsync(context);
+    }
+}
+```
+
+### 3. Production Migration Strategy
+
+**Option 1: Automatic on Startup** (Small apps):
+```csharp
+if (app.Environment.IsProduction())
+{
+    using var scope = app.Services.CreateScope();
+    var context = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
+    await context.Database.MigrateAsync();
+}
+```
+
+**Option 2: SQL Scripts** (Recommended for Production):
+```bash
+# Generate SQL script
+dotnet ef migrations script --output migrate.sql
+
+# Review and execute manually or via CI/CD
+```
+
+**Option 3: Separate Migration Tool**:
+```csharp
+// Separate console app for migrations
+class Program
+{
+    static async Task Main(string[] args)
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<ApplicationDbContext>();
+        optionsBuilder.UseSqlServer(connectionString);
+
+        using var context = new ApplicationDbContext(optionsBuilder.Options);
+        await context.Database.MigrateAsync();
+    }
+}
+```
+
+## Repository Pattern Considerations
+
+### When to Use Repository Pattern with EF Core?
+
+**❌ DON'T use for simple CRUD**:
+```csharp
+// Unnecessary abstraction
+public interface IProductRepository
+{
+    Task<Product> GetByIdAsync(int id);
+    Task<List<Product>> GetAllAsync();
+    Task AddAsync(Product product);
+}
+
+// EF Core already IS a repository!
+```
+
+**✅ DO use when**:
+- Complex business logic in data access
+- Multiple data sources (SQL + NoSQL)
+- Need to swap implementations
+- Extensive unit testing without database
+
+### Alternative: Direct DbContext with Service Layer
+
+```csharp
+public class ProductService
+{
+    private readonly ApplicationDbContext _context;
+
+    public async Task<ProductDto> GetProductAsync(int id)
+    {
+        return await _context.Products
+            .AsNoTracking()
+            .Where(p => p.Id == id)
+            .Select(p => new ProductDto { ... })
+            .FirstOrDefaultAsync();
+    }
+
+    public async Task<int> CreateProductAsync(CreateProductDto dto)
+    {
+        var product = new Product
+        {
+            Name = dto.Name,
+            Price = dto.Price,
+            CategoryId = dto.CategoryId
+        };
+
+        _context.Products.Add(product);
+        await _context.SaveChangesAsync();
+
+        return product.Id;
+    }
+}
+```
+
+## Unit of Work Pattern
+
+**Only if coordinating multiple repositories**:
+
+```csharp
+public interface IUnitOfWork : IDisposable
+{
+    IProductRepository Products { get; }
+    ICategoryRepository Categories { get; }
+    Task<int> SaveChangesAsync();
+}
+
+public class UnitOfWork : IUnitOfWork
+{
+    private readonly ApplicationDbContext _context;
+
+    public UnitOfWork(ApplicationDbContext context)
+    {
+        _context = context;
+        Products = new ProductRepository(context);
+        Categories = new CategoryRepository(context);
+    }
+
+    public IProductRepository Products { get; }
+    public ICategoryRepository Categories { get; }
+
+    public async Task<int> SaveChangesAsync()
+    {
+        return await _context.SaveChangesAsync();
+    }
+
+    public void Dispose()
+    {
+        _context.Dispose();
+    }
+}
+```
+
+## Transaction Management
+
+### Explicit Transactions
+
+```csharp
+using var transaction = await _context.Database.BeginTransactionAsync();
+
+try
+{
+    // Multiple operations
+    _context.Products.Add(newProduct);
+    await _context.SaveChangesAsync();
+
+    _context.Inventory.Add(newInventory);
+    await _context.SaveChangesAsync();
+
+    await transaction.CommitAsync();
+}
+catch
+{
+    await transaction.RollbackAsync();
+    throw;
+}
+```
+
+### Implicit Transactions
+
+```csharp
+// SaveChangesAsync wraps everything in a transaction automatically
+_context.Products.Add(product);
+_context.Inventory.Add(inventory);
+await _context.SaveChangesAsync(); // Atomic operation
+```
+
+## Common Pitfalls
+
+### 1. Modifying Tracked Entities
+
+```csharp
+// ❌ BAD - Modifying navigation property causes update
+var product = await _context.Products
+    .Include(p => p.Category)
+    .FirstAsync(p => p.Id == id);
+
+product.Category.Name = "New Name"; // Category WILL be updated!
+await _context.SaveChangesAsync();
+
+// ✅ GOOD - Use AsNoTracking or be explicit
+var product = await _context.Products
+    .AsNoTracking()
+    .Include(p => p.Category)
+    .FirstAsync(p => p.Id == id);
+```
+
+### 2. Using Include When Not Needed
+
+```csharp
+// ❌ BAD - Loading related data not used
+var products = await _context.Products
+    .Include(p => p.Category)
+    .Include(p => p.Brand)
+    .Select(p => new ProductDto
+    {
+        Id = p.Id,
+        Name = p.Name
+        // Not using Category or Brand!
+    })
+    .ToListAsync();
+
+// ✅ GOOD - No Include needed with projection
+var products = await _context.Products
+    .Select(p => new ProductDto
+    {
+        Id = p.Id,
+        Name = p.Name
+    })
+    .ToListAsync();
+```
+
+### 3. Lazy Loading Pitfalls
+
+```csharp
+// ❌ BAD - Lazy loading triggers N+1
+foreach (var product in products) // 1 query
+{
+    var categoryName = product.Category.Name; // N queries!
+}
+
+// ✅ GOOD - Eager load or projection
+var products = await _context.Products
+    .Include(p => p.Category)
+    .ToListAsync();
+```
+
+### 4. Not Disposing DbContext
+
+```csharp
+// ❌ BAD - Memory leak
+var context = new ApplicationDbContext();
+var products = context.Products.ToList();
+// Context never disposed!
+
+// ✅ GOOD - Using statement
+using var context = new ApplicationDbContext();
+var products = await context.Products.ToListAsync();
+```
+
+## Performance Monitoring
+
+### Enable Query Logging (Development)
+
+```csharp
+builder.Services.AddDbContext<ApplicationDbContext>(options =>
+{
+    options.UseSqlServer(connectionString);
+    
+    if (builder.Environment.IsDevelopment())
+    {
+        options.LogTo(Console.WriteLine, LogLevel.Information);
+        options.EnableSensitiveDataLogging();
+    }
+});
+```
+
+### Use Query Tags
+
+```csharp
+var products = await _context.Products
+    .TagWith("GetProductsForHomePage")
+    .Where(p => p.IsFeatured)
+    .ToListAsync();
+```
+
+SQL Output:
+```sql
+-- GetProductsForHomePage
+SELECT * FROM Products WHERE IsFeatured = 1
+```
+
+## Testing with EF Core
+
+### In-Memory Database
+
+```csharp
+[Fact]
+public async Task GetProduct_ReturnsProduct()
+{
+    // Arrange
+    var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+        .UseInMemoryDatabase(databaseName: "TestDb")
+        .Options;
+
+    using var context = new ApplicationDbContext(options);
+    context.Products.Add(new Product { Id = 1, Name = "Test" });
+    await context.SaveChangesAsync();
+
+    // Act
+    var service = new ProductService(context);
+    var product = await service.GetProductAsync(1);
+
+    // Assert
+    Assert.NotNull(product);
+    Assert.Equal("Test", product.Name);
+}
+```
+
+### SQLite In-Memory (Better)
+
+```csharp
+private ApplicationDbContext CreateContext()
+{
+    var connection = new SqliteConnection("DataSource=:memory:");
+    connection.Open();
+
+    var options = new DbContextOptionsBuilder<ApplicationDbContext>()
+        .UseSqlite(connection)
+        .Options;
+
+    var context = new ApplicationDbContext(options);
+    context.Database.EnsureCreated();
+
+    return context;
+}
+```
+
+## Kết luận
+
+EF Core best practices cho production:
+
+✅ **Configuration**:
+- Scoped lifetime
+- Connection retry
+- Separate configurations
+
+✅ **Performance**:
+- AsNoTracking for reads
+- Projection to DTOs
+- Avoid N+1 queries
+- Use indexes
+
+✅ **Migrations**:
+- Descriptive names
+- Review generated SQL
+- Production strategy
+
+✅ **Patterns**:
+- Repository chỉ khi cần
+- Direct DbContext + Service layer
+- Explicit transactions khi cần
+
+EF Core là powerful tool - dùng đúng cách sẽ giúp application scalable và maintainable!

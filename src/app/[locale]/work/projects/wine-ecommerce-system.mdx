@@ -1,0 +1,126 @@
+---
+title: "Wine & Drink E-commerce System"
+subtitle: "Full-stack e-commerce platform with Clean Architecture and CQRS"
+summary: "Enterprise-level e-commerce system built with ASP.NET Core 8.0 (Clean Architecture, CQRS) and Next.js, featuring role-based authorization, comprehensive reporting, and server-side data optimization."
+image: "/images/gallery/horizontal-1.jpg"
+publishedAt: "2024-12-15"
+tag: "ASP.NET Core"
+---
+
+## Overview
+
+A comprehensive wine and drink e-commerce system built from the ground up using modern architectural patterns and best practices. The project demonstrates production-ready implementation of Clean Architecture, CQRS, and secure authentication patterns.
+
+## Core Technologies
+
+### Backend Stack
+- **ASP.NET Core 8.0** - Latest .NET framework
+- **Clean Architecture** - Clear separation of concerns and dependencies
+- **CQRS with MediatR** - Command Query Responsibility Segregation
+- **Entity Framework Core** - ORM for data access
+- **ASP.NET Identity** - User management and authentication
+- **JWT Authentication** - Access & Refresh Token implementation
+- **FluentValidation** - Input validation
+- **AutoMapper** - Object-to-object mapping
+- **Serilog** - Structured logging
+- **SignalR** - Real-time notifications
+
+### Frontend Stack
+- **Next.js 14** with App Router
+- **React 18** with TypeScript
+- **Shadcn UI** - Component library
+- **Tailwind CSS** - Utility-first styling
+- **SWR** - Client-side data fetching and caching
+- **Zod** - Schema validation
+- **Axios** - HTTP client
+
+## Key Features
+
+### 1. Authentication & Authorization
+- **JWT-based authentication** with Access and Refresh tokens
+- **Role-based authorization** (Admin, Customer)
+- Secure token storage using httpOnly cookies
+- Automatic token refresh mechanism
+- Identity management with ASP.NET Identity
+
+### 2. Clean Architecture Implementation
+```
+- Domain Layer (Entities, Value Objects)
+- Application Layer (Use Cases, DTOs, Validators)
+- Infrastructure Layer (Data Access, External Services)
+- Presentation Layer (API Controllers, Middleware)
+```
+
+### 3. CQRS Pattern
+- Clear separation between Commands (mutations) and Queries (reads)
+- MediatR for handling requests
+- Optimized query performance
+- Simplified testing and maintenance
+
+### 4. Product Management
+- Complete CRUD operations
+- Image upload and management
+- Category and brand organization
+- Inventory tracking
+- Server-side filtering, pagination, and sorting
+
+### 5. Admin Dashboard
+- Order management
+- Customer management
+- Product catalog management
+- Sales analytics
+- Real-time notifications via SignalR
+
+### 6. Reporting System
+- **Excel export** - Order reports, inventory reports
+- **PDF export** - Invoices, sales reports
+- Custom date range filtering
+- Comprehensive sales analytics
+
+### 7. Performance Optimizations
+- **Server-side pagination** - Efficient data loading
+- **Server-side filtering** - Optimized queries with EF Core
+- **Server-side sorting** - Dynamic ordering
+- Caching strategies for frequently accessed data
+- Lazy loading for improved initial load time
+
+## Architecture Highlights
+
+### Dependency Injection
+All services properly registered with appropriate lifetimes (Scoped, Transient, Singleton).
+
+### Validation Pipeline
+FluentValidation integrated into MediatR pipeline for automatic request validation.
+
+### Error Handling
+Global exception handling middleware for consistent error responses.
+
+### Logging
+Structured logging with Serilog for debugging and monitoring.
+
+## Challenges & Solutions
+
+### Challenge 1: Complex Filtering Logic
+**Solution**: Implemented dynamic Expression Trees for flexible, performant filtering without code duplication.
+
+### Challenge 2: Token Management
+**Solution**: Implemented Refresh Token rotation with secure storage and automatic renewal.
+
+### Challenge 3: Report Generation Performance
+**Solution**: Used background jobs for large reports and streaming for Excel/PDF generation.
+
+## Future Enhancements
+- Implement caching with Redis
+- Add Docker containerization
+- Integrate payment gateway
+- Real-time inventory updates
+- Advanced analytics dashboard
+- Email notifications
+- Product reviews and ratings
+
+## Technical Lessons Learned
+- Clean Architecture provides excellent maintainability but requires careful planning
+- CQRS significantly simplifies complex business logic
+- Server-side filtering is crucial for scalable applications
+- Proper authentication architecture is foundational for security
+- Type safety (TypeScript + Zod) catches errors early in development

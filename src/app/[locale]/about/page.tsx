@@ -16,38 +16,57 @@ import { baseURL, about, person, social } from "@/resources";
 import TableOfContents from "@/components/about/TableOfContents";
 import styles from "@/components/about/about.module.scss";
 import React from "react";
+import { getTranslations, getMessages } from "next-intl/server";
 
-export async function generateMetadata() {
+export async function generateMetadata({
+  params
+}: {
+  params: Promise<{ locale: string }>
+}) {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: 'About' });
+
   return Meta.generate({
-    title: about.title,
-    description: about.description,
+    title: t('title'),
+    description: t('description'),
     baseURL: baseURL,
-    image: `/api/og/generate?title=${encodeURIComponent(about.title)}`,
+    image: `/api/og/generate?title=${encodeURIComponent(t('title'))}`,
     path: about.path,
   });
 }
 
-export default function About() {
+export default async function About({
+  params
+}: {
+  params: Promise<{ locale: string }>
+}) {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: 'About' });
+  const tPerson = await getTranslations({ locale, namespace: 'Person' });
+  const messages = await getMessages({ locale });
+  const aboutData = (messages as any).About;
+  const personData = (messages as any).Person;
+
   const structure = [
     {
-      title: about.intro.title,
+      title: aboutData.intro.title,
       display: about.intro.display,
       items: [],
     },
     {
-      title: about.work.title,
+      title: aboutData.work.title,
       display: about.work.display,
-      items: about.work.experiences.map((experience) => experience.company),
+      items: aboutData.work.experiences.map((experience: any) => experience.company),
     },
     {
-      title: about.studies.title,
+      title: aboutData.studies.title,
       display: about.studies.display,
-      items: about.studies.institutions.map((institution) => institution.name),
+      items: aboutData.studies.institutions.map((institution: any) => institution.name),
     },
     {
-      title: about.technical.title,
+      title: aboutData.technical.title,
       display: about.technical.display,
-      items: about.technical.skills.map((skill) => skill.title),
+      items: aboutData.technical.skills.map((skill: any) => skill.title),
     },
   ];
   return (
@@ -55,12 +74,12 @@ export default function About() {
       <Schema
         as="webPage"
         baseURL={baseURL}
-        title={about.title}
-        description={about.description}
+        title={t('title')}
+        description={t('description')}
         path={about.path}
-        image={`/api/og/generate?title=${encodeURIComponent(about.title)}`}
+        image={`/api/og/generate?title=${encodeURIComponent(t('title'))}`}
         author={{
-          name: person.name,
+          name: tPerson('name'),
           url: `${baseURL}${about.path}`,
           image: `${baseURL}${person.avatar}`,
         }}
@@ -77,7 +96,7 @@ export default function About() {
           <TableOfContents structure={structure} about={about} />
         </Column>
       )}
-      <Row fillWidth s={{ direction: "column"}} horizontal="center">
+      <Row fillWidth s={{ direction: "column" }} horizontal="center">
         {about.avatar.display && (
           <Column
             className={styles.avatar}
@@ -96,13 +115,13 @@ export default function About() {
             <Avatar src={person.avatar} size="xl" />
             <Row gap="8" vertical="center">
               <Icon onBackground="accent-weak" name="globe" />
-              {person.location}
+              {tPerson('location')}
             </Row>
-            {person.languages && person.languages.length > 0 && (
+            {personData.languages && (
               <Row wrap gap="8">
-                {person.languages.map((language, index) => (
+                {personData.languages.split(',').map((language: string, index: number) => (
                   <Tag key={index} size="l">
-                    {language}
+                    {language.trim()}
                   </Tag>
                 ))}
               </Row>
@@ -111,7 +130,7 @@ export default function About() {
         )}
         <Column className={styles.blockAlign} flex={9} maxWidth={40}>
           <Column
-            id={about.intro.title}
+            id={aboutData.intro.title}
             fillWidth
             minHeight="160"
             vertical="center"
@@ -143,14 +162,14 @@ export default function About() {
               </Row>
             )}
             <Heading className={styles.textAlign} variant="display-strong-xl">
-              {person.name}
+              {tPerson('name')}
             </Heading>
             <Text
               className={styles.textAlign}
               variant="display-default-xs"
               onBackground="neutral-weak"
             >
-              {person.role}
+              {tPerson('role')}
             </Text>
             {social.length > 0 && (
               <Row
@@ -164,51 +183,53 @@ export default function About() {
                 data-border="rounded"
               >
                 {social
-                      .filter((item) => item.essential)
-                      .map(
-                  (item) =>
-                    item.link && (
-                      <React.Fragment key={item.name}>
-                        <Row s={{ hide: true }}>
-                          <Button
-                            key={item.name}
-                            href={item.link}
-                            prefixIcon={item.icon}
-                            label={item.name}
-                            size="s"
-                            weight="default"
-                            variant="secondary"
-                          />
-                        </Row>
-                        <Row hide s={{ hide: false }}>
-                          <IconButton
-                            size="l"
-                            key={`${item.name}-icon`}
-                            href={item.link}
-                            icon={item.icon}
-                            variant="secondary"
-                          />
-                        </Row>
-                      </React.Fragment>
-                    ),
-                )}
+                  .filter((item) => item.essential)
+                  .map(
+                    (item) =>
+                      item.link && (
+                        <React.Fragment key={item.name}>
+                          <Row s={{ hide: true }}>
+                            <Button
+                              key={item.name}
+                              href={item.link}
+                              prefixIcon={item.icon}
+                              label={item.name}
+                              size="s"
+                              weight="default"
+                              variant="secondary"
+                            />
+                          </Row>
+                          <Row hide s={{ hide: false }}>
+                            <IconButton
+                              size="l"
+                              key={`${item.name}-icon`}
+                              href={item.link}
+                              icon={item.icon}
+                              variant="secondary"
+                            />
+                          </Row>
+                        </React.Fragment>
+                      ),
+                  )}
               </Row>
             )}
           </Column>
 
           {about.intro.display && (
             <Column textVariant="body-default-l" fillWidth gap="m" marginBottom="xl">
-              {about.intro.description}
+              {t.rich('intro.description', {
+                name: tPerson('name')
+              })}
             </Column>
           )}
 
           {about.work.display && (
             <>
-              <Heading as="h2" id={about.work.title} variant="display-strong-s" marginBottom="m">
-                {about.work.title}
+              <Heading as="h2" id={aboutData.work.title} variant="display-strong-s" marginBottom="m">
+                {aboutData.work.title}
               </Heading>
               <Column fillWidth gap="l" marginBottom="40">
-                {about.work.experiences.map((experience, index) => (
+                {aboutData.work.experiences.map((experience: any, index: number) => (
                   <Column key={`${experience.company}-${experience.role}-${index}`} fillWidth>
                     <Row fillWidth horizontal="between" vertical="end" marginBottom="4">
                       <Text id={experience.company} variant="heading-strong-l">
@@ -223,7 +244,7 @@ export default function About() {
                     </Text>
                     <Column as="ul" gap="16">
                       {experience.achievements.map(
-                        (achievement: React.ReactNode, index: number) => (
+                        (achievement: string, index: number) => (
                           <Text
                             as="li"
                             variant="body-default-m"
@@ -234,27 +255,6 @@ export default function About() {
                         ),
                       )}
                     </Column>
-                    {experience.images && experience.images.length > 0 && (
-                      <Row fillWidth paddingTop="m" paddingLeft="40" gap="12" wrap>
-                        {experience.images.map((image, index) => (
-                          <Row
-                            key={index}
-                            border="neutral-medium"
-                            radius="m"
-                            minWidth={image.width}
-                            height={image.height}
-                          >
-                            <Media
-                              enlarge
-                              radius="m"
-                              sizes={image.width.toString()}
-                              alt={image.alt}
-                              src={image.src}
-                            />
-                          </Row>
-                        ))}
-                      </Row>
-                    )}
                   </Column>
                 ))}
               </Column>
@@ -263,11 +263,11 @@ export default function About() {
 
           {about.studies.display && (
             <>
-              <Heading as="h2" id={about.studies.title} variant="display-strong-s" marginBottom="m">
-                {about.studies.title}
+              <Heading as="h2" id={aboutData.studies.title} variant="display-strong-s" marginBottom="m">
+                {aboutData.studies.title}
               </Heading>
               <Column fillWidth gap="l" marginBottom="40">
-                {about.studies.institutions.map((institution, index) => (
+                {aboutData.studies.institutions.map((institution: any, index: number) => (
                   <Column key={`${institution.name}-${index}`} fillWidth gap="4">
                     <Text id={institution.name} variant="heading-strong-l">
                       {institution.name}
@@ -285,51 +285,22 @@ export default function About() {
             <>
               <Heading
                 as="h2"
-                id={about.technical.title}
+                id={aboutData.technical.title}
                 variant="display-strong-s"
                 marginBottom="40"
               >
-                {about.technical.title}
+                {aboutData.technical.title}
               </Heading>
               <Column fillWidth gap="l">
-                {about.technical.skills.map((skill, index) => (
-                  <Column key={`${skill}-${index}`} fillWidth gap="4">
+                {aboutData.technical.skills.map((skill: any, index: number) => (
+                  <Column key={`${skill.title}-${index}`} fillWidth gap="4">
                     <Text id={skill.title} variant="heading-strong-l">
                       {skill.title}
                     </Text>
                     <Text variant="body-default-m" onBackground="neutral-weak">
                       {skill.description}
                     </Text>
-                    {skill.tags && skill.tags.length > 0 && (
-                      <Row wrap gap="8" paddingTop="8">
-                        {skill.tags.map((tag, tagIndex) => (
-                          <Tag key={`${skill.title}-${tagIndex}`} size="l" prefixIcon={tag.icon}>
-                            {tag.name}
-                          </Tag>
-                        ))}
-                      </Row>
-                    )}
-                    {skill.images && skill.images.length > 0 && (
-                      <Row fillWidth paddingTop="m" gap="12" wrap>
-                        {skill.images.map((image, index) => (
-                          <Row
-                            key={index}
-                            border="neutral-medium"
-                            radius="m"
-                            minWidth={image.width}
-                            height={image.height}
-                          >
-                            <Media
-                              enlarge
-                              radius="m"
-                              sizes={image.width.toString()}
-                              alt={image.alt}
-                              src={image.src}
-                            />
-                          </Row>
-                        ))}
-                      </Row>
-                    )}
+                    {/* Tags and images support can be re-added if data is moved to JSON or mapped from config */}
                   </Column>
                 ))}
               </Column>

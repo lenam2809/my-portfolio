@@ -1,8 +1,9 @@
 "use client";
 
-import { mailchimp, newsletter } from "@/resources";
+import { mailchimp, newsletter, person } from "@/resources";
 import { Button, Heading, Input, Text, Background, Column, Row } from "@once-ui-system/core";
 import { opacity, SpacingToken } from "@once-ui-system/core";
+import { useTranslations } from "next-intl";
 import { useState } from "react";
 
 function debounce<T extends (...args: any[]) => void>(func: T, delay: number): T {
@@ -17,6 +18,7 @@ export const Mailchimp: React.FC<React.ComponentProps<typeof Column>> = ({ ...fl
   const [email, setEmail] = useState<string>("");
   const [error, setError] = useState<string>("");
   const [touched, setTouched] = useState<boolean>(false);
+  const t = useTranslations('Newsletter');
 
   const validateEmail = (email: string): boolean => {
     if (email === "") {
@@ -33,8 +35,6 @@ export const Mailchimp: React.FC<React.ComponentProps<typeof Column>> = ({ ...fl
 
     if (!validateEmail(value)) {
       setError("Please enter a valid email address.");
-    } else {
-      setError("");
     }
   };
 
@@ -43,7 +43,7 @@ export const Mailchimp: React.FC<React.ComponentProps<typeof Column>> = ({ ...fl
   const handleBlur = () => {
     setTouched(true);
     if (!validateEmail(email)) {
-      setError("Please enter a valid email address.");
+      setError(t("errorEmail"));
     }
   };
 
@@ -106,10 +106,10 @@ export const Mailchimp: React.FC<React.ComponentProps<typeof Column>> = ({ ...fl
       />
       <Column maxWidth="xs" horizontal="center">
         <Heading marginBottom="s" variant="display-strong-xs">
-          {newsletter.title}
+          {t("title", { name: person.name })}
         </Heading>
         <Text wrap="balance" marginBottom="l" variant="body-default-l" onBackground="neutral-weak">
-          {newsletter.description}
+          {t("description")}
         </Text>
       </Column>
       <form
@@ -135,7 +135,7 @@ export const Mailchimp: React.FC<React.ComponentProps<typeof Column>> = ({ ...fl
             id="mce-EMAIL"
             name="EMAIL"
             type="email"
-            placeholder="Email"
+            placeholder={t("emailPlaceholder")}
             required
             onChange={(e) => {
               if (error) {
@@ -173,7 +173,7 @@ export const Mailchimp: React.FC<React.ComponentProps<typeof Column>> = ({ ...fl
           <div className="clear">
             <Row height="48" vertical="center">
               <Button id="mc-embedded-subscribe" value="Subscribe" size="m" fillWidth>
-                Subscribe
+                {t("subscribe")}
               </Button>
             </Row>
           </div>

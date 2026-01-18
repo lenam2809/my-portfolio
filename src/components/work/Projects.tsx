@@ -5,10 +5,11 @@ import { ProjectCard } from "@/components";
 interface ProjectsProps {
   range?: [number, number?];
   exclude?: string[];
+  locale?: string;
 }
 
-export function Projects({ range, exclude }: ProjectsProps) {
-  let allProjects = getPosts(["src", "app", "work", "projects"]);
+export function Projects({ range, exclude, locale = "vi" }: ProjectsProps) {
+  let allProjects = getPosts(["src", "app", "[locale]", "work", "projects"]);
 
   // Exclude by slug (exact match)
   if (exclude && exclude.length > 0) {
@@ -29,7 +30,7 @@ export function Projects({ range, exclude }: ProjectsProps) {
         <ProjectCard
           priority={index < 2}
           key={post.slug}
-          href={`/work/${post.slug}`}
+          href={`/${locale}/work/${post.slug}`}
           images={post.metadata.images}
           title={post.metadata.title}
           description={post.metadata.summary}

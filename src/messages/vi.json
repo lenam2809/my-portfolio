@@ -1,0 +1,131 @@
+{
+  "HomePage": {
+    "title": "Portfolio – .NET Developer",
+    "description": ".NET Backend/Fullstack Developer chuyên Clean Architecture, CQRS và hệ thống web mở rộng",
+    "headline": "Xây dựng hệ thống dễ mở rộng, dễ bảo trì với Clean Architecture",
+    "subline": "Tôi là <name>.NET Backend/Fullstack Developer</name> <br></br> tập trung vào Clean Architecture, CQRS pattern và xây dựng ứng dụng web production-ready.",
+    "featuredTitleLeft": "Wine E-commerce",
+    "featuredTitleRight": "Dự án tiêu biểu",
+    "latestBlog": "Bài viết kỹ thuật mới nhất"
+  },
+  "ProjectCard": {
+    "readCaseStudy": "Đọc case study",
+    "viewProject": "Xem dự án"
+  },
+  "Newsletter": {
+    "title": "Theo dõi bản tin của {name}",
+    "description": "Chia sẻ kỹ thuật về .NET, Clean Architecture, CQRS và phát triển web hiện đại",
+    "subscribe": "Đăng ký",
+    "emailPlaceholder": "Email",
+    "errorEmail": "Vui lòng nhập địa chỉ email hợp lệ.",
+    "success": "Đăng ký thành công!"
+  },
+  "Footer": {
+    "buildWith": "Xây dựng portfolio với",
+    "copyright": "© {year}"
+  },
+  "Person": {
+    "name": ".NET Developer",
+    "role": ".NET Backend / Fullstack Developer",
+    "location": "Asia/Ho_Chi_Minh",
+    "aboutTitle": "Giới thiệu – {name}",
+    "languages": "Tiếng Việt, English"
+  },
+  "About": {
+    "title": "Giới thiệu",
+    "description": ".NET Backend/Fullstack Developer chuyên Clean Architecture và CQRS patterns",
+    "intro": {
+      "title": "Tổng quan",
+      "description": "Tôi là .NET Developer với trọng tâm là Backend Development, có kinh nghiệm xây dựng các hệ thống web theo Clean Architecture và CQRS. Tôi đặc biệt quan tâm đến việc thiết kế hệ thống dễ mở rộng, dễ bảo trì và tối ưu hiệu năng."
+    },
+    "work": {
+      "title": "Kinh nghiệm làm việc",
+      "experiences": [
+        {
+          "company": "Wine/Drink E-commerce System",
+          "timeframe": "Dự án gần đây",
+          "role": ".NET Backend Developer",
+          "achievements": [
+            "Xây dựng backend với ASP.NET Core 8.0, Clean Architecture và CQRS sử dụng MediatR",
+            "Triển khai frontend Next.js với xác thực đầy đủ và phân quyền theo vai trò (Admin/Customer)",
+            "Phát triển hệ thống báo cáo toàn diện với khả năng export Excel và PDF",
+            "Implement server-side filtering, pagination và sorting để tối ưu hiệu năng"
+          ]
+        },
+        {
+          "company": "ClothesStore Project",
+          "timeframe": "Dự án gần đây",
+          "role": "Fullstack Developer",
+          "achievements": [
+            "Xây dựng .NET 8 API với frontend Next.js 13",
+            "Áp dụng CQRS pattern kết hợp Repository pattern",
+            "Phát triển luồng xác thực bảo mật với cơ chế Refresh Token",
+            "Tích hợp ASP.NET Identity cho quản lý người dùng"
+          ]
+        },
+        {
+          "company": "Car Sales Backend API",
+          "timeframe": "Dự án gần đây",
+          "role": "Backend Developer",
+          "achievements": [
+            "Thiết kế và triển khai ASP.NET Core 8 API với Clean Architecture",
+            "Tạo cấu trúc có khả năng mở rộng và dễ bảo trì, sẵn sàng mở rộng tính năng",
+            "Tập trung vào best practices về kiến trúc và chất lượng code"
+          ]
+        }
+      ]
+    },
+    "studies": {
+      "title": "Học tập",
+      "institutions": [
+        {
+          "name": "Công nghệ phần mềm",
+          "description": "Tự học thông qua xây dựng hệ thống production và các dự án thực tế."
+        }
+      ]
+    },
+    "technical": {
+      "title": "Kỹ năng kỹ thuật",
+      "skills": [
+        {
+          "title": "Backend & Kiến trúc hệ thống",
+          "description": "ASP.NET Core 8.0 · Clean Architecture · CQRS (MediatR) · Entity Framework Core · ASP.NET Identity · JWT Authentication (Access & Refresh Token) · FluentValidation · AutoMapper · Serilog · SignalR · RESTful API Design"
+        },
+        {
+          "title": "Frontend & Web hiện đại",
+          "description": "Next.js (App Router) · React · TypeScript · SWR · Tailwind CSS · Shadcn UI · Zod · Axios · Server-side data fetching"
+        },
+        {
+          "title": "Công cụ & Phát triển",
+          "description": "Docker · Excel/PDF Export · WinForms (.NET 8) · Git · Server-side filtering/pagination/sorting · Tối ưu hiệu năng"
+        }
+      ]
+    }
+  },
+  "Blog": {
+    "label": "Blog",
+    "title": "Ghi chép về hệ thống, sản phẩm và quyết định kỹ thuật",
+    "description": "Bài viết và chia sẻ từ {name}"
+  },
+  "Work": {
+    "label": "Dự án",
+    "title": "Dự án – {name}",
+    "description": "Các dự án phần mềm và thương mại điện tử tiêu biểu"
+  },
+  "Gallery": {
+    "label": "Thư viện",
+    "title": "Thư viện – {name}",
+    "description": "Hình ảnh, snapshot và tư liệu dự án"
+  },
+  "Nav": {
+    "home": "Trang chủ",
+    "about": "Giới thiệu",
+    "work": "Dự án",
+    "blog": "Blog",
+    "gallery": "Thư viện",
+    "switch": {
+      "vi": "Tiếng Việt",
+      "en": "English"
+    }
+  }
+}

@@ -12,32 +12,49 @@ import {
   Line,
 } from "@once-ui-system/core";
 import { home, about, person, baseURL, routes } from "@/resources";
-import { Mailchimp } from "@/components";
+import { Mailchimp, SublineText } from "@/components";
 import { Projects } from "@/components/work/Projects";
 import { Posts } from "@/components/blog/Posts";
+import { getTranslations } from "next-intl/server";
 
-export async function generateMetadata() {
+export async function generateMetadata({
+  params
+}: {
+  params: Promise<{ locale: string }>
+}) {
+  const { locale } = await params;
+  const t = await getTranslations({ locale, namespace: 'HomePage' });
+
   return Meta.generate({
-    title: home.title,
-    description: home.description,
+    title: t('title'),
+    description: t('description'),
     baseURL: baseURL,
     path: home.path,
     image: home.image,
   });
 }
 
-export default function Home() {
+export default async function Home({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
+  const t = await getTranslations('HomePage');
+  const tPerson = await getTranslations('Person');
+  const tAbout = await getTranslations('About');
+
   return (
     <Column maxWidth="m" gap="xl" paddingY="12" horizontal="center">
       <Schema
         as="webPage"
         baseURL={baseURL}
         path={home.path}
-        title={home.title}
-        description={home.description}
-        image={`/api/og/generate?title=${encodeURIComponent(home.title)}`}
+        title={t('title')}
+        description={t('description')}
+        image={`/api/og/generate?title=${encodeURIComponent(t('title'))}`}
         author={{
-          name: person.name,
+          name: tPerson('name'),
           url: `${baseURL}${about.path}`,
           image: `${baseURL}${person.avatar}`,
         }}
@@ -59,27 +76,33 @@ export default function Home() {
                 onBackground="neutral-strong"
                 textVariant="label-default-s"
                 arrow={false}
-                href={home.featured.href}
+                href={`/${locale}${home.featured.href}`}
               >
-                <Row paddingY="2">{home.featured.title}</Row>
+                <Row paddingY="2">
+                  <Row gap="12" vertical="center">
+                    <strong className="ml-4">{t('featuredTitleLeft')}</strong>{" "}
+                    <Line background="brand-alpha-strong" vert height="20" />
+                    <Text marginRight="4" onBackground="brand-medium">
+                      {t('featuredTitleRight')}
+                    </Text>
+                  </Row>
+                </Row>
               </Badge>
             </RevealFx>
           )}
           <RevealFx translateY="4" fillWidth horizontal="center" paddingBottom="16">
             <Heading wrap="balance" variant="display-strong-l">
-              {home.headline}
+              {t('headline')}
             </Heading>
           </RevealFx>
           <RevealFx translateY="8" delay={0.2} fillWidth horizontal="center" paddingBottom="32">
-            <Text wrap="balance" onBackground="neutral-weak" variant="heading-default-xl">
-              {home.subline}
-            </Text>
+            <SublineText />
           </RevealFx>
           <RevealFx paddingTop="12" delay={0.4} horizontal="center" paddingLeft="12">
             <Button
               id="about"
               data-border="rounded"
-              href={about.path}
+              href={`/${locale}${about.path}`}
               variant="secondary"
               size="m"
               weight="default"
@@ -94,14 +117,14 @@ export default function Home() {
                     size="m"
                   />
                 )}
-                {about.title}
+                {tPerson('aboutTitle', { name: tPerson('name') })}
               </Row>
             </Button>
           </RevealFx>
         </Column>
       </Column>
       <RevealFx translateY="16" delay={0.6}>
-        <Projects range={[1, 1]} />
+        <Projects range={[1, 1]} locale={locale} />
       </RevealFx>
       {routes["/blog"] && (
         <Column fillWidth gap="24" marginBottom="l">
@@ -111,7 +134,7 @@ export default function Home() {
           <Row fillWidth gap="24" marginTop="40" s={{ direction: "column" }}>
             <Row flex={1} paddingLeft="l" paddingTop="24">
               <Heading as="h2" variant="display-strong-xs" wrap="balance">
-                Latest from the blog
+                {t('latestBlog')}
               </Heading>
             </Row>
             <Row flex={3} paddingX="20">
@@ -123,7 +146,7 @@ export default function Home() {
           </Row>
         </Column>
       )}
-      <Projects range={[2]} />
+      <Projects range={[2]} locale={locale} />
       <Mailchimp />
     </Column>
   );

@@ -23,7 +23,7 @@ import { Posts } from "@/components/blog/Posts";
 import { ShareSection } from "@/components/blog/ShareSection";
 
 export async function generateStaticParams(): Promise<{ slug: string }[]> {
-  const posts = getPosts(["src", "app", "blog", "posts"]);
+  const posts = getPosts(["src", "app", "[locale]", "blog", "posts"]);
   return posts.map((post) => ({
     slug: post.slug,
   }));
@@ -39,7 +39,7 @@ export async function generateMetadata({
     ? routeParams.slug.join("/")
     : routeParams.slug || "";
 
-  const posts = getPosts(["src", "app", "blog", "posts"]);
+  const posts = getPosts(["src", "app", "[locale]", "blog", "posts"]);
   let post = posts.find((post) => post.slug === slugPath);
 
   if (!post) return {};
@@ -53,13 +53,14 @@ export async function generateMetadata({
   });
 }
 
-export default async function Blog({ params }: { params: Promise<{ slug: string | string[] }> }) {
+export default async function Blog({ params }: { params: Promise<{ slug: string | string[]; locale: string }> }) {
   const routeParams = await params;
   const slugPath = Array.isArray(routeParams.slug)
     ? routeParams.slug.join("/")
     : routeParams.slug || "";
+  const locale = routeParams.locale || "vi";
 
-  let post = getPosts(["src", "app", "blog", "posts"]).find((post) => post.slug === slugPath);
+  let post = getPosts(["src", "app", "[locale]", "blog", "posts"]).find((post) => post.slug === slugPath);
 
   if (!post) {
     notFound();
@@ -94,7 +95,7 @@ export default async function Blog({ params }: { params: Promise<{ slug: string 
             }}
           />
           <Column maxWidth="s" gap="16" horizontal="center" align="center">
-            <SmartLink href="/blog">
+            <SmartLink href={`/${locale}/blog`}>
               <Text variant="label-strong-m">Blog</Text>
             </SmartLink>
             <Text variant="body-default-xs" onBackground="neutral-weak" marginBottom="12">
@@ -102,9 +103,9 @@ export default async function Blog({ params }: { params: Promise<{ slug: string 
             </Text>
             <Heading variant="display-strong-m">{post.metadata.title}</Heading>
             {post.metadata.subtitle && (
-              <Text 
-                variant="body-default-l" 
-                onBackground="neutral-weak" 
+              <Text
+                variant="body-default-l"
+                onBackground="neutral-weak"
                 align="center"
                 style={{ fontStyle: 'italic' }}
               >
@@ -136,10 +137,10 @@ export default async function Blog({ params }: { params: Promise<{ slug: string 
           <Column as="article" maxWidth="s">
             <CustomMDX source={post.content} />
           </Column>
-          
-          <ShareSection 
-            title={post.metadata.title} 
-            url={`${baseURL}${blog.path}/${post.slug}`} 
+
+          <ShareSection
+            title={post.metadata.title}
+            url={`${baseURL}${blog.path}/${post.slug}`}
           />
 
           <Column fillWidth gap="40" horizontal="center" marginTop="40">

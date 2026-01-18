@@ -12,7 +12,12 @@ export async function generateMetadata() {
   });
 }
 
-export default function Work() {
+export default async function Work({
+  params,
+}: {
+  params: Promise<{ locale: string }>;
+}) {
+  const { locale } = await params;
   return (
     <Column maxWidth="m" paddingTop="24">
       <Schema
@@ -31,7 +36,7 @@ export default function Work() {
       <Heading marginBottom="l" variant="heading-strong-xl" align="center">
         {work.title}
       </Heading>
-      <Projects />
+      <Projects locale={locale} />
     </Column>
   );
 }

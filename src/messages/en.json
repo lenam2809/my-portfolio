@@ -1,0 +1,131 @@
+{
+  "HomePage": {
+    "title": "Portfolio – .NET Developer",
+    "description": ".NET Backend/Fullstack Developer specializing in Clean Architecture, CQRS, and scalable web systems",
+    "headline": "Building scalable, maintainable systems with Clean Architecture",
+    "subline": "I'm a <name>.NET Backend/Fullstack Developer</name> <br></br> focused on Clean Architecture, CQRS patterns, and building production-ready web applications.",
+    "featuredTitleLeft": "Wine E-commerce",
+    "featuredTitleRight": "Featured Project",
+    "latestBlog": "Latest technical articles"
+  },
+  "ProjectCard": {
+    "readCaseStudy": "Read case study",
+    "viewProject": "View project"
+  },
+  "Newsletter": {
+    "title": "Subscribe to {name}'s newsletter",
+    "description": "Technical insights on .NET, Clean Architecture, CQRS, and modern web development",
+    "subscribe": "Subscribe",
+    "emailPlaceholder": "Email",
+    "errorEmail": "Please enter a valid email address.",
+    "success": "Subscribed successfully!"
+  },
+  "Footer": {
+    "buildWith": "Build your portfolio with",
+    "copyright": "© {year}"
+  },
+  "Person": {
+    "name": ".NET Developer",
+    "role": ".NET Backend / Fullstack Developer",
+    "location": "Asia/Ho_Chi_Minh",
+    "aboutTitle": "About – {name}",
+    "languages": "Vietnamese, English"
+  },
+  "About": {
+    "title": "About",
+    "description": ".NET Backend/Fullstack Developer specializing in Clean Architecture and CQRS patterns",
+    "intro": {
+      "title": "Overview",
+      "description": "I'm a .NET Developer with a strong focus on Backend Development, experienced in building web systems using Clean Architecture and CQRS patterns. I'm particularly interested in designing systems that are scalable, maintainable, and performance-optimized."
+    },
+    "work": {
+      "title": "Work Experience",
+      "experiences": [
+        {
+          "company": "Wine/Drink E-commerce System",
+          "timeframe": "Recent Project",
+          "role": ".NET Backend Developer",
+          "achievements": [
+            "Built backend with ASP.NET Core 8.0, Clean Architecture, and CQRS using MediatR",
+            "Implemented Next.js frontend with full authentication and role-based authorization (Admin/Customer)",
+            "Developed comprehensive reporting system with Excel and PDF export capabilities",
+            "Implemented server-side filtering, pagination, and sorting for optimal performance"
+          ]
+        },
+        {
+          "company": "ClothesStore Project",
+          "timeframe": "Recent Project",
+          "role": "Fullstack Developer",
+          "achievements": [
+            "Built .NET 8 API with Next.js 13 frontend",
+            "Implemented CQRS pattern with Repository pattern",
+            "Developed secure authentication flow with Refresh Token mechanism",
+            "Integrated ASP.NET Identity for user management"
+          ]
+        },
+        {
+          "company": "Car Sales Backend API",
+          "timeframe": "Recent Project",
+          "role": "Backend Developer",
+          "achievements": [
+            "Designed and implemented ASP.NET Core 8 API with Clean Architecture",
+            "Created scalable, maintainable structure ready for feature expansion",
+            "Focused on architectural best practices and code quality"
+          ]
+        }
+      ]
+    },
+    "studies": {
+      "title": "Education",
+      "institutions": [
+        {
+          "name": "Software Engineering",
+          "description": "Self-taught through building production systems and practical projects."
+        }
+      ]
+    },
+    "technical": {
+      "title": "Technical Skills",
+      "skills": [
+        {
+          "title": "Backend & System Architecture",
+          "description": "ASP.NET Core 8.0 · Clean Architecture · CQRS (MediatR) · Entity Framework Core · ASP.NET Identity · JWT Authentication (Access & Refresh Token) · FluentValidation · AutoMapper · Serilog · SignalR · RESTful API Design"
+        },
+        {
+          "title": "Frontend & Modern Web",
+          "description": "Next.js (App Router) · React · TypeScript · SWR · Tailwind CSS · Shadcn UI · Zod · Axios · Server-side data fetching"
+        },
+        {
+          "title": "Tools & Development",
+          "description": "Docker · Excel/PDF Export · WinForms (.NET 8) · Git · Server-side filtering/pagination/sorting · Performance optimization"
+        }
+      ]
+    }
+  },
+  "Blog": {
+    "label": "Blog",
+    "title": "Notes on systems, products, and technical decisions",
+    "description": "Articles and sharing from {name}"
+  },
+  "Work": {
+    "label": "Work",
+    "title": "Projects – {name}",
+    "description": "Featured software and e-commerce projects"
+  },
+  "Gallery": {
+    "label": "Gallery",
+    "title": "Gallery – {name}",
+    "description": "Images, snapshots, and project materials"
+  },
+  "Nav": {
+    "home": "Home",
+    "about": "About",
+    "work": "Work",
+    "blog": "Blog",
+    "gallery": "Gallery",
+    "switch": {
+      "vi": "Vietnamese",
+      "en": "English"
+    }
+  }
+}

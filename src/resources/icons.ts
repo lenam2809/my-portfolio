@@ -1,4 +1,4 @@
-import { IconType } from "react-icons";
+import type { IconType } from "react-icons";
 
 import {
   HiArrowUpRight,
@@ -64,6 +64,8 @@ export const iconLibrary: Record<string, IconType> = {
   reddit: FaReddit,
   telegram: FaTelegram,
   instagram: FaInstagram,
+  vi: HiOutlineGlobeAsiaAustralia,
+  en: HiOutlineGlobeAsiaAustralia,
 };
 
 export type IconLibrary = typeof iconLibrary;

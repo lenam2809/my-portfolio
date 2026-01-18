@@ -3,6 +3,7 @@
 import { Card, Column, Media, Row, Avatar, Text } from "@once-ui-system/core";
 import { formatDate } from "@/utils/formatDate";
 import { person } from "@/resources";
+import { useParams } from "next/navigation";
 
 interface PostProps {
   post: any;
@@ -11,11 +12,14 @@ interface PostProps {
 }
 
 export default function Post({ post, thumbnail, direction }: PostProps) {
+  const params = useParams();
+  const locale = (params?.locale as string) || "vi";
+
   return (
     <Card
       fillWidth
       key={post.slug}
-      href={`/blog/${post.slug}`}
+      href={`/${locale}/blog/${post.slug}`}
       transition="micro-medium"
       direction={direction}
       border="transparent"

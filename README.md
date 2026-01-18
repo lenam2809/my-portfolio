@@ -1,91 +1,118 @@
-# Magic Portfolio
+# Portfolio Cá Nhân
 
-Magic Portfolio is a simple, clean, beginner-friendly portfolio template. It supports an MDX-based content system for projects and blog posts, an about / CV page and a gallery.
+> **Được xây dựng với Magic Portfolio**  
+> Portfolio này dựa trên [Magic Portfolio](https://github.com/once-ui-system/magic-portfolio) của Once UI - một template portfolio hiện đại, gọn gàng dành cho developers và designers.
 
-View the demo [here](https://demo.magic-portfolio.com).
+Website portfolio cá nhân giới thiệu công việc của mình với vai trò .NET Backend/Fullstack Developer. Hỗ trợ song ngữ (Tiếng Việt/English), blog kỹ thuật và showcase các dự án.
 
-![Magic Portfolio](public/images/og/home.jpg)
+````carousel
+![Giao diện Light Mode - Tiếng Anh](file:///d:/2026/projects/magic-portfolio/public/images/og/homepage.png)
+<!-- slide -->
+![Giao diện Dark Mode - Tiếng Việt](file:///d:/2026/projects/magic-portfolio/public/images/og/homepage-dark.png)
+````
 
-## Getting started
+## Giới Thiệu Portfolio
 
-**1. Clone the repository**
-```
-git clone https://github.com/once-ui-system/magic-portfolio.git
-```
+Đây là portfolio cá nhân được xây dựng dựa trên template Magic Portfolio, được tùy chỉnh để làm nổi bật chuyên môn trong phát triển backend, kiến trúc hệ thống và fullstack engineering. Website bao gồm:
 
-**2. Install dependencies**
-```
+- **Nội Dung Song Ngữ**: Hỗ trợ đầy đủ Tiếng Việt và Tiếng Anh với next-intl
+- **Blog Kỹ Thuật**: Các bài viết về Clean Architecture, CQRS, tối ưu hiệu năng và nhiều hơn nữa
+- **Showcase Dự Án**: Các dự án thực tế thể hiện năng lực backend và fullstack
+- **CV Chuyên Nghiệp**: Trình bày chi tiết kinh nghiệm và kỹ năng
+
+## Công Nghệ Sử Dụng
+
+- **Framework**: [Next.js](https://nextjs.org) (v18.17+)
+- **Thư Viện UI**: [Once UI](https://once-ui.com)
+- **Quản Lý Nội Dung**: Hệ thống MDX
+- **Đa Ngôn Ngữ**: next-intl
+- **Styling**: Once UI design tokens & data attributes
+
+## Phát Triển Cục Bộ
+
+**1. Cài đặt dependencies**
+```bash
 npm install
 ```
 
-**3. Run dev server**
-```
+**2. Chạy development server**
+```bash
 npm run dev
 ```
 
-**4. Edit config**
+**3. Mở trình duyệt**
 ```
-src/resources/once-ui.config.js
-```
-
-**5. Edit content**
-```
-src/resources/content.js
+http://localhost:3000
 ```
 
-**6. Create blog posts / projects**
+**4. Cấu hình**
+- Design system: `src/resources/once-ui.config.js`
+- Nội dung & bản dịch: `src/resources/content.tsx` và `messages/[locale].json`
+
+**5. Quản lý nội dung**
+- Bài viết blog: `src/app/[locale]/blog/posts/*.mdx`
+- Dự án: `src/app/[locale]/work/projects/*.mdx`
+
+## Tính Năng
+
+### Thiết Kế & Trải Nghiệm
+- Giao diện responsive tối ưu cho mọi thiết bị
+- Thiết kế chuyên nghiệp, gọn gàng với các tương tác tinh tế
+- Tùy chỉnh theme linh hoạt qua data attributes
+- Hỗ trợ Dark mode
+
+### Quản Lý Nội Dung
+- Blog posts và project pages dựa trên MDX
+- Hiển thị sections có điều kiện
+- Tự động tạo social links
+- Hỗ trợ bảo vệ trang bằng mật khẩu
+
+### SEO & Hiệu Năng
+- Tự động tạo Open Graph images
+- Schema markup và metadata
+- Tối ưu cho công cụ tìm kiếm
+- Tốc độ tải trang nhanh
+
+### Đa Ngôn Ngữ
+- Hỗ trợ Tiếng Việt và Tiếng Anh
+- Routes và nội dung được bản địa hóa
+- Tự động nhận diện ngôn ngữ
+
+## Cấu Trúc Dự Án
+
 ```
-Add a new .mdx file to src/app/blog/posts or src/app/work/projects
+src/
+├── app/[locale]/          # Các trang đa ngôn ngữ
+│   ├── about/            # Trang giới thiệu/CV
+│   ├── blog/             # Blog posts
+│   ├── work/             # Showcase dự án
+│   └── gallery/          # Thư viện ảnh
+├── components/           # React components
+├── resources/            # Config và nội dung
+└── messages/             # File bản dịch
 ```
 
-Magic Portfolio was built with [Once UI](https://once-ui.com) for [Next.js](https://nextjs.org). It requires Node.js v18.17+.
+## Ghi Công & Giấy Phép
 
-## Documentation
+**Portfolio này được xây dựng với [Magic Portfolio](https://github.com/once-ui-system/magic-portfolio)** được tạo bởi **Once UI**.
 
-Docs available at: [docs.once-ui.com](https://docs.once-ui.com/docs/magic-portfolio/quick-start)
+### Điều Khoản Giấy Phép
 
-## Features
+Phân phối theo **Giấy Phép CC BY-NC 4.0**.
 
-### Once UI
-- All tokens, components & features of [Once UI](https://once-ui.com)
+- ✅ **Bắt buộc ghi công** - Phải ghi nhận Once UI và link đến [Magic Portfolio](https://github.com/once-ui-system/magic-portfolio) gốc
+- ❌ **Không cho phép sử dụng thương mại** - Giấy phép này chỉ cho phép sử dụng phi thương mại
+- 🔓 **Mở rộng sang Dopler CC** - Mua giấy phép [Once UI Pro](https://once-ui.com/pricing) để mở khóa quyền sử dụng thương mại
 
-### SEO
-- Automatic open-graph and X image generation with next/og
-- Automatic schema and metadata generation based on the content file
+Xem [`LICENSE.txt`](LICENSE.txt) để biết thông tin đầy đủ về giấy phép.
 
-### Design
-- Responsive layout optimized for all screen sizes
-- Timeless design without heavy animations and motion
-- Endless customization options through [data attributes](https://once-ui.com/docs/theming)
+### Ghi Nhận
 
-### Content
-- Render sections conditionally based on the content file
-- Enable or disable pages for blog, work, gallery and about / CV
-- Generate and display social links automatically
-- Set up password protection for URLs
+- **Template**: [Magic Portfolio](https://github.com/once-ui-system/magic-portfolio)
+- **Tác Giả Gốc**: Lorant One ([Threads](https://www.threads.net/@lorant.one) / [LinkedIn](https://www.linkedin.com/in/lorant-one/))
+- **Thư Viện UI**: [Once UI](https://once-ui.com)
+- **Framework**: [Next.js](https://nextjs.org)
 
-### Localization
-- A localized, earlier version of Magic Portfolio is available with the next-intl library
-- To use localization, switch to the 'i18n' branch
+---
 
-## Creators
-
-Lorant One: [Threads](https://www.threads.net/@lorant.one) / [LinkedIn](https://www.linkedin.com/in/lorant-one/)
-
-## Get involved
-
-- Join the Design Engineers Club on [Discord](https://discord.com/invite/5EyAQ4eNdS) and share your project with us!
-- Deployed your docs? Share it on the [Once UI Hub](https://once-ui.com/hub) too! We feature our favorite apps on our landing page.
-
-## License
-
-Distributed under the CC BY-NC 4.0 License.
-- Attribution is required.
-- Commercial usage is not allowed.
-- You can extend the license to [Dopler CC](https://dopler.app/license) by purchasing a [Once UI Pro](https://once-ui.com/pricing) license.
-
-See `LICENSE.txt` for more information.
-
-## Deploy with Vercel
-
-[![Deploy with Vercel](https://vercel.com/button)](https://vercel.com/new/clone?repository-url=https%3A%2F%2Fgithub.com%2Fonce-ui-system%2Fmagic-portfolio&project-name=portfolio&repository-name=portfolio&redirect-url=https%3A%2F%2Fgithub.com%2Fonce-ui-system%2Fmagic-portfolio&demo-title=Magic%20Portfolio&demo-description=Showcase%20your%20designers%20or%20developer%20portfolio&demo-url=https%3A%2F%2Fdemo.magic-portfolio.com&demo-image=%2F%2Fraw.githubusercontent.com%2Fonce-ui-system%2Fmagic-portfolio%2Fmain%2Fpublic%2Fimages%2Fog%2Fhome.jpg)
+**Lưu ý**: Đây là website portfolio cá nhân, phi thương mại. Tất cả nội dung và tùy chỉnh gốc là của riêng tôi, trong khi template nền tảng và các UI components được cung cấp bởi Once UI theo Giấy Phép CC BY-NC 4.0.

@@ -1,0 +1,618 @@
+---
+title: "Tích hợp ASP.NET Core Backend với Next.js Frontend"
+subtitle: "Best practices cho fullstack development với .NET và React"
+summary: "Hướng dẫn tích hợp ASP.NET Core API với Next.js frontend, bao gồm CORS configuration, type-safe API calls, authentication flow, state management với SWR, và deployment strategies."
+image: "/images/gallery/horizontal-3.jpg"
+publishedAt: "2025-01-10"
+tag: "Fullstack"
+---
+
+## Stack Overview
+
+**Backend**: ASP.NET Core 8.0
+- RESTful API design
+- JWT Authentication
+- Entity Framework Core
+- Swagger/OpenAPI
+
+**Frontend**: Next.js 14 + TypeScript
+- App Router
+- React Server Components
+- SWR for data fetching
+- Tailwind CSS + Shadcn UI
+
+## Project Structure
+
+```
+project-root/
+├── backend/                    # ASP.NET Core API
+│   ├── API/
+│   ├── Application/
+│   ├── Domain/
+│   └── Infrastructure/
+│
+└── frontend/                   # Next.js App
+    ├── app/
+    ├── components/
+    ├── lib/
+    │   ├── api/               # API client
+    │   ├── types/             # TypeScript types
+    │   └── hooks/             # Custom hooks
+    └── public/
+```
+
+## Backend Setup
+
+### 1. CORS Configuration
+
+**Program.cs**:
+```csharp
+var builder = WebApplication.CreateBuilder(args);
+
+// Configure CORS
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("NextJsApp", policy =>
+    {
+        policy.WithOrigins("http://localhost:3000", "https://yourapp.com")
+              .AllowAnyMethod()
+              .AllowAnyHeader()
+              .AllowCredentials(); // Important for cookies
+    });
+});
+
+var app = builder.Build();
+
+// Use CORS
+app.UseCors("NextJsApp");
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapControllers();
+app.Run();
+```
+
+**Production CORS** (appsettings.Production.json):
+```json
+{
+  "AllowedOrigins": [
+    "https://yourapp.com",
+    "https://www.yourapp.com"
+  ]
+}
+```
+
+### 2. API Response Format
+
+**Standardized Response**:
+```csharp
+namespace API.Common
+{
+    public class ApiResponse<T>
+    {
+        public bool Success { get; set; }
+        public T Data { get; set; }
+        public string Message { get; set; }
+        public List<string> Errors { get; set; }
+
+        public static ApiResponse<T> SuccessResult(T data, string message = null)
+        {
+            return new ApiResponse<T>
+            {
+                Success = true,
+                Data = data,
+                Message = message
+            };
+        }
+
+        public static ApiResponse<T> ErrorResult(string message, List<string> errors = null)
+        {
+            return new ApiResponse<T>
+            {
+                Success = false,
+                Message = message,
+                Errors = errors ?? new List<string>()
+            };
+        }
+    }
+}
+```
+
+**Usage in Controllers**:
+```csharp
+[HttpGet]
+public async Task<ActionResult<ApiResponse<List<ProductDto>>>> GetProducts()
+{
+    var products = await _mediator.Send(new GetProductsQuery());
+    return Ok(ApiResponse<List<ProductDto>>.SuccessResult(products));
+}
+
+[HttpPost]
+public async Task<ActionResult<ApiResponse<ProductDto>>> CreateProduct(CreateProductCommand command)
+{
+    var product = await _mediator.Send(command);
+    return CreatedAtAction(
+        nameof(GetProductById),
+        new { id = product.Id },
+        ApiResponse<ProductDto>.SuccessResult(product, "Product created successfully")
+    );
+}
+```
+
+### 3. Swagger Configuration
+
+```csharp
+builder.Services.AddSwaggerGen(c =>
+{
+    c.SwaggerDoc("v1", new OpenApiInfo
+    {
+        Title = "E-Commerce API",
+        Version = "v1",
+        Description = "ASP.NET Core API for Next.js Frontend"
+    });
+
+    // JWT Authentication
+    c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
+    {
+        Description = "JWT Authorization header using the Bearer scheme",
+        Name = "Authorization",
+        In = ParameterLocation.Header,
+        Type = SecuritySchemeType.ApiKey,
+        Scheme = "Bearer"
+    });
+
+    c.AddSecurityRequirement(new OpenApiSecurityRequirement
+    {
+        {
+            new OpenApiSecurityScheme
+            {
+                Reference = new OpenApiReference
+                {
+                    Type = ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            },
+            Array.Empty<string>()
+        }
+    });
+});
+```
+
+## Frontend Setup
+
+### 1. API Client (Axios)
+
+**lib/api/client.ts**:
+```typescript
+import axios, { AxiosError, AxiosRequestConfig } from 'axios';
+
+const API_URL = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000';
+
+export const apiClient = axios.create({
+  baseURL: API_URL,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  withCredentials: true, // For cookies
+});
+
+// Request interceptor
+apiClient.interceptors.request.use(
+  (config) => {
+    // Add access token from localStorage if available
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      config.headers.Authorization = `Bearer ${token}`;
+    }
+    return config;
+  },
+  (error) => Promise.reject(error)
+);
+
+// Response interceptor for auto token refresh
+apiClient.interceptors.response.use(
+  (response) => response,
+  async (error: AxiosError) => {
+    const originalRequest = error.config as AxiosRequestConfig & { _retry?: boolean };
+
+    // If 401 and haven't retried yet
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      try {
+        // Attempt to refresh token
+        const { data } = await axios.post(
+          `${API_URL}/api/auth/refresh-token`,
+          {},
+          { withCredentials: true }
+        );
+
+        // Update access token
+        localStorage.setItem('accessToken', data.accessToken);
+
+        // Retry original request
+        if (originalRequest.headers) {
+          originalRequest.headers.Authorization = `Bearer ${data.accessToken}`;
+        }
+
+        return apiClient(originalRequest);
+      } catch (refreshError) {
+        // Refresh failed, logout user
+        localStorage.removeItem('accessToken');
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+```
+
+### 2. TypeScript Types from Backend
+
+**Automatic Type Generation**:
+
+Use **NSwag** or **OpenAPI Generator** để tự động generate types từ Swagger:
+
+```bash
+# Install NSwag CLI
+npm install -g nswag
+
+# Generate TypeScript client
+nswag openapi2tsclient /input:http://localhost:5000/swagger/v1/swagger.json /output:lib/api/generated/api-client.ts
+```
+
+**Manual Types** (lib/types/api.ts):
+```typescript
+// API Response wrapper
+export interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+  errors?: string[];
+}
+
+// Product DTOs
+export interface ProductDto {
+  id: number;
+  name: string;
+  price: number;
+  description: string;
+  categoryId: number;
+  categoryName: string;
+  imageUrl?: string;
+}
+
+export interface CreateProductDto {
+  name: string;
+  price: number;
+  description: string;
+  categoryId: number;
+}
+
+// Pagination
+export interface PaginatedResponse<T> {
+  items: T[];
+  pageNumber: number;
+  pageSize: number;
+  totalPages: number;
+  totalCount: number;
+  hasPreviousPage: boolean;
+  hasNextPage: boolean;
+}
+
+// Auth
+export interface AuthResponse {
+  accessToken: string;
+  username: string;
+  email: string;
+  roles: string[];
+}
+
+export interface LoginRequest {
+  username: string;
+  password: string;
+}
+```
+
+### 3. API Service Layer
+
+**lib/api/products.service.ts**:
+```typescript
+import { apiClient } from './client';
+import type { ApiResponse, ProductDto, CreateProductDto, PaginatedResponse } from '@/lib/types/api';
+
+export class ProductsService {
+  private readonly baseUrl = '/api/products';
+
+  async getAll(params?: {
+    pageNumber?: number;
+    pageSize?: number;
+    searchTerm?: string;
+    categoryId?: number;
+  }): Promise<PaginatedResponse<ProductDto>> {
+    const { data } = await apiClient.get<ApiResponse<PaginatedResponse<ProductDto>>>(
+      this.baseUrl,
+      { params }
+    );
+    return data.data;
+  }
+
+  async getById(id: number): Promise<ProductDto> {
+    const { data } = await apiClient.get<ApiResponse<ProductDto>>(`${this.baseUrl}/${id}`);
+    return data.data;
+  }
+
+  async create(product: CreateProductDto): Promise<ProductDto> {
+    const { data } = await apiClient.post<ApiResponse<ProductDto>>(this.baseUrl, product);
+    return data.data;
+  }
+
+  async update(id: number, product: Partial<ProductDto>): Promise<ProductDto> {
+    const { data } = await apiClient.put<ApiResponse<ProductDto>>(
+      `${this.baseUrl}/${id}`,
+      product
+    );
+    return data.data;
+  }
+
+  async delete(id: number): Promise<void> {
+    await apiClient.delete(`${this.baseUrl}/${id}`);
+  }
+}
+
+export const productsService = new ProductsService();
+```
+
+### 4. Custom Hooks với SWR
+
+**lib/hooks/useProducts.ts**:
+```typescript
+import useSWR from 'swr';
+import { productsService } from '@/lib/api/products.service';
+import type { ProductDto, PaginatedResponse } from '@/lib/types/api';
+
+export function useProducts(params?: {
+  pageNumber?: number;
+  pageSize?: number;
+  searchTerm?: string;
+  categoryId?: number;
+}) {
+  const { data, error, mutate } = useSWR(
+    ['/api/products', params],
+    () => productsService.getAll(params),
+    {
+      revalidateOnFocus: false,
+      dedupingInterval: 5000, // Cache for 5 seconds
+    }
+  );
+
+  return {
+    products: data,
+    isLoading: !error && !data,
+    isError: error,
+    mutate,
+  };
+}
+
+export function useProduct(id: number | null) {
+  const { data, error, mutate } = useSWR(
+    id ? `/api/products/${id}` : null,
+    () => id ? productsService.getById(id) : null
+  );
+
+  return {
+    product: data,
+    isLoading: !error && !data,
+    isError: error,
+    mutate,
+  };
+}
+```
+
+**lib/hooks/useAuth.ts**:
+```typescript
+import useSWR from 'swr';
+import { apiClient } from '@/lib/api/client';
+import type { AuthResponse, LoginRequest } from '@/lib/types/api';
+
+export function useAuth() {
+  const { data, error, mutate } = useSWR<AuthResponse | null>(
+    '/api/auth/user',
+    async () => {
+      const token = localStorage.getItem('accessToken');
+      if (!token) return null;
+
+      try {
+        const { data } = await apiClient.get('/api/auth/user');
+        return data.data;
+      } catch {
+        return null;
+      }
+    }
+  );
+
+  const login = async (credentials: LoginRequest) => {
+    const response = await apiClient.post<{ data: AuthResponse }>(
+      '/api/auth/login',
+      credentials
+    );
+
+    localStorage.setItem('accessToken', response.data.data.accessToken);
+    await mutate(response.data.data);
+
+    return response.data.data;
+  };
+
+  const logout = async () => {
+    await apiClient.post('/api/auth/logout');
+    localStorage.removeItem('accessToken');
+    await mutate(null);
+  };
+
+  return {
+    user: data,
+    isLoading: !error && !data,
+    isAuthenticated: !!data,
+    login,
+    logout,
+  };
+}
+```
+
+### 5. React Components
+
+**app/products/page.tsx** (Server Component):
+```typescript
+import { ProductsList } from '@/components/products/products-list';
+
+export default function ProductsPage() {
+  return (
+    <div className="container mx-auto py-8">
+      <h1 className="text-3xl font-bold mb-6">Products</h1>
+      <ProductsList />
+    </div>
+  );
+}
+```
+
+**components/products/products-list.tsx** (Client Component):
+```typescript
+'use client';
+
+import { useState } from 'react';
+import { useProducts } from '@/lib/hooks/useProducts';
+import { ProductCard } from './product-card';
+import { Pagination } from '@/components/ui/pagination';
+
+export function ProductsList() {
+  const [page, setPage] = useState(1);
+  const [search, setSearch] = useState('');
+
+  const { products, isLoading, isError } = useProducts({
+    pageNumber: page,
+    pageSize: 12,
+    searchTerm: search,
+  });
+
+  if (isLoading) return <div>Loading...</div>;
+  if (isError) return <div>Error loading products</div>;
+  if (!products) return null;
+
+  return (
+    <div>
+      {/* Search */}
+      <input
+        type="text"
+        placeholder="Search products..."
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+        className="mb-4 px-4 py-2 border rounded"
+      />
+
+      {/* Products Grid */}
+      <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6">
+        {products.items.map((product) => (
+          <ProductCard key={product.id} product={product} />
+        ))}
+      </div>
+
+      {/* Pagination */}
+      <Pagination
+        currentPage={products.pageNumber}
+        totalPages={products.totalPages}
+        onPageChange={setPage}
+      />
+    </div>
+  );
+}
+```
+
+## Error Handling
+
+**Global Error Handler** (app/error.tsx):
+```typescript
+'use client';
+
+export default function Error({
+  error,
+  reset,
+}: {
+  error: Error & { digest?: string };
+  reset: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center justify-center min-h-screen">
+      <h2 className="text-2xl font-bold mb-4">Something went wrong!</h2>
+      <button
+        onClick={() => reset()}
+        className="px-4 py-2 bg-blue-500 text-white rounded"
+      >
+        Try again
+      </button>
+    </div>
+  );
+}
+```
+
+## Environment Variables
+
+**Frontend (.env.local)**:
+```bash
+NEXT_PUBLIC_API_URL=http://localhost:5000
+```
+
+**Backend (appsettings.Development.json)**:
+```json
+{
+  "AllowedOrigins": ["http://localhost:3000"]
+}
+```
+
+## Deployment
+
+### Development
+```bash
+# Backend
+cd backend && dotnet run
+
+# Frontend
+cd frontend && npm run dev
+```
+
+### Production
+
+**Backend** (Deploy to Azure/AWS):
+- Configure production CORS origins
+- Use environment variables for secrets
+- Enable HTTPS
+
+**Frontend** (Deploy to Vercel):
+```bash
+# Set environment variable
+NEXT_PUBLIC_API_URL=https://api.yourapp.com
+
+# Deploy
+vercel --prod
+```
+
+## Best Practices
+
+1. **Type Safety**: Sử dụng TypeScript types generated từ Swagger
+2. **Error Handling**: Global error boundaries + try-catch
+3. **Loading States**: Skeleton loaders, Suspense boundaries
+4. **Caching**: SWR revalidation strategies
+5. **Security**: CORS, HTTPS, httpOnly cookies
+6. **Performance**: Server Components, dynamic imports
+7. **Testing**: Unit tests (xUnit) + E2E tests (Playwright)
+
+## Kết luận
+
+Tích hợp ASP.NET Core + Next.js tạo ra tech stack mạnh mẽ:
+- ✅ **Type Safety** từ backend đến frontend
+- ✅ **Developer Experience** với hot reload cả 2 bên
+- ✅ **Performance** với React Server Components và EF Core optimization
+- ✅ **Security** với JWT và CORS configuration
+- ✅ **Scalability** dễ dàng scale từng service độc lập

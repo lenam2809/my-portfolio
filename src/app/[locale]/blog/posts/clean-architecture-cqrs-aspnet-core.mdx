@@ -1,0 +1,638 @@
+---
+title: "Clean Architecture & CQRS trong ASP.NET Core: Xây dựng hệ thống dễ mở rộng"
+subtitle: "Hướng dẫn chi tiết triển khai Clean Architecture và CQRS Pattern với MediatR"
+summary: "Khám phá cách kết hợp Clean Architecture và CQRS để xây dựng hệ thống backend có khả năng mở rộng cao, dễ bảo trì và test. Bao gồm cấu trúc dự án, code examples và best practices từ dự án thực tế."
+image: "/images/gallery/horizontal-1.jpg"
+publishedAt: "2025-01-15"
+tag: "Architecture"
+---
+
+## Tại sao Clean Architecture?
+
+Clean Architecture giúp tách biệt các concern khác nhau trong ứng dụng, đảm bảo business logic không phụ thuộc vào framework, database hay UI. Điều này mang lại:
+
+- **Testability**: Dễ dàng test business logic mà không cần database thật
+- **Independence**: Có thể thay đổi framework, database mà không ảnh hưởng core logic
+- **Maintainability**: Code rõ ràng, dễ hiểu, dễ sửa
+- **Scalability**: Dễ dàng mở rộng tính năng mới
+
+## CQRS Pattern là gì?
+
+**Command Query Responsibility Segregation** - Tách biệt trách nhiệm giữa:
+- **Commands**: Thao tác ghi (Create, Update, Delete) - Thay đổi state
+- **Queries**: Thao tác đọc (Get, List, Search) - Không thay đổi state
+
+### Lợi ích của CQRS
+- Tối ưu performance cho từng loại operation
+- Code dễ đọc và maintain hơn
+- Phù hợp với Event Sourcing (nếu cần)
+- Scale read và write độc lập
+
+## Cấu trúc Dự án
+
+```
+Solution/
+├── Domain/                    # Core business logic
+│   ├── Entities/             # Domain entities
+│   ├── ValueObjects/         # Value objects
+│   ├── Enums/                # Enumerations
+│   └── Interfaces/           # Repository interfaces
+│
+├── Application/               # Use cases
+│   ├── Products/
+│   │   ├── Commands/         # Write operations
+│   │   │   ├── CreateProduct/
+│   │   │   │   ├── CreateProductCommand.cs
+│   │   │   │   ├── CreateProductCommandHandler.cs
+│   │   │   │   └── CreateProductCommandValidator.cs
+│   │   │   └── UpdateProduct/
+│   │   │       └── ...
+│   │   └── Queries/          # Read operations
+│   │       ├── GetProducts/
+│   │       │   ├── GetProductsQuery.cs
+│   │       │   └── GetProductsQueryHandler.cs
+│   │       └── GetProductById/
+│   │           └── ...
+│   ├── Common/
+│   │   ├── DTOs/             # Data transfer objects
+│   │   ├── Mappings/         # AutoMapper profiles
+│   │   └── Behaviors/        # MediatR pipelines
+│   └── DependencyInjection.cs
+│
+├── Infrastructure/            # External concerns
+│   ├── Data/
+│   │   ├── ApplicationDbContext.cs
+│   │   └── Configurations/   # EF Core configs
+│   ├── Repositories/         # Repository implementations
+│   └── Services/             # External services
+│
+└── API/                      # Presentation
+    ├── Controllers/
+    ├── Middleware/
+    └── Program.cs
+```
+
+## Triển khai từng Layer
+
+### 1. Domain Layer
+
+**Product Entity**:
+```csharp
+namespace Domain.Entities
+{
+    public class Product
+    {
+        public int Id { get; private set; }
+        public string Name { get; private set; }
+        public decimal Price { get; private set; }
+        public string Description { get; private set; }
+        public int CategoryId { get; private set; }
+        
+        // Navigation
+        public Category Category { get; private set; }
+        
+        // Constructor
+        private Product() { } // For EF Core
+        
+        public Product(string name, decimal price, string description, int categoryId)
+        {
+            Name = name;
+            Price = price;
+            Description = description;
+            CategoryId = categoryId;
+        }
+        
+        // Business methods
+        public void UpdatePrice(decimal newPrice)
+        {
+            if (newPrice <= 0)
+                throw new ArgumentException("Price must be positive");
+                
+            Price = newPrice;
+        }
+    }
+}
+```
+
+**Repository Interface**:
+```csharp
+namespace Domain.Interfaces
+{
+    public interface IProductRepository
+    {
+        Task<Product> GetByIdAsync(int id);
+        Task<List<Product>> GetAllAsync();
+        Task<Product> AddAsync(Product product);
+        void Update(Product product);
+        void Delete(Product product);
+    }
+}
+```
+
+### 2. Application Layer - Commands
+
+**CreateProductCommand.cs**:
+```csharp
+using MediatR;
+
+namespace Application.Products.Commands.CreateProduct
+{
+    public class CreateProductCommand : IRequest<ProductDto>
+    {
+        public string Name { get; set; }
+        public decimal Price { get; set; }
+        public string Description { get; set; }
+        public int CategoryId { get; set; }
+    }
+}
+```
+
+**CreateProductCommandHandler.cs**:
+```csharp
+using MediatR;
+using AutoMapper;
+using Domain.Entities;
+using Domain.Interfaces;
+
+namespace Application.Products.Commands.CreateProduct
+{
+    public class CreateProductCommandHandler 
+        : IRequestHandler<CreateProductCommand, ProductDto>
+    {
+        private readonly IProductRepository _productRepository;
+        private readonly IUnitOfWork _unitOfWork;
+        private readonly IMapper _mapper;
+
+        public CreateProductCommandHandler(
+            IProductRepository productRepository,
+            IUnitOfWork unitOfWork,
+            IMapper mapper)
+        {
+            _productRepository = productRepository;
+            _unitOfWork = unitOfWork;
+            _mapper = mapper;
+        }
+
+        public async Task<ProductDto> Handle(
+            CreateProductCommand request, 
+            CancellationToken cancellationToken)
+        {
+            // Create entity
+            var product = new Product(
+                request.Name,
+                request.Price,
+                request.Description,
+                request.CategoryId
+            );
+
+            // Add to repository
+            await _productRepository.AddAsync(product);
+
+            // Save changes
+            await _unitOfWork.SaveChangesAsync(cancellationToken);
+
+            // Return DTO
+            return _mapper.Map<ProductDto>(product);
+        }
+    }
+}
+```
+
+**CreateProductCommandValidator.cs**:
+```csharp
+using FluentValidation;
+
+namespace Application.Products.Commands.CreateProduct
+{
+    public class CreateProductCommandValidator 
+        : AbstractValidator<CreateProductCommand>
+    {
+        public CreateProductCommandValidator()
+        {
+            RuleFor(x => x.Name)
+                .NotEmpty().WithMessage("Product name is required")
+                .MaximumLength(100).WithMessage("Name cannot exceed 100 characters");
+
+            RuleFor(x => x.Price)
+                .GreaterThan(0).WithMessage("Price must be greater than 0");
+
+            RuleFor(x => x.Description)
+                .MaximumLength(500).WithMessage("Description cannot exceed 500 characters");
+
+            RuleFor(x => x.CategoryId)
+                .GreaterThan(0).WithMessage("Valid category is required");
+        }
+    }
+}
+```
+
+### 3. Application Layer - Queries
+
+**GetProductsQuery.cs**:
+```csharp
+using MediatR;
+
+namespace Application.Products.Queries.GetProducts
+{
+    public class GetProductsQuery : IRequest<List<ProductDto>>
+    {
+        public string SearchTerm { get; set; }
+        public int? CategoryId { get; set; }
+        public decimal? MinPrice { get; set; }
+        public decimal? MaxPrice { get; set; }
+        public int PageNumber { get; set; } = 1;
+        public int PageSize { get; set; } = 10;
+    }
+}
+```
+
+**GetProductsQueryHandler.cs**:
+```csharp
+using MediatR;
+using AutoMapper;
+using AutoMapper.QueryableExtensions;
+using Microsoft.EntityFrameworkCore;
+
+namespace Application.Products.Queries.GetProducts
+{
+    public class GetProductsQueryHandler 
+        : IRequestHandler<GetProductsQuery, List<ProductDto>>
+    {
+        private readonly IApplicationDbContext _context;
+        private readonly IMapper _mapper;
+
+        public GetProductsQueryHandler(
+            IApplicationDbContext context,
+            IMapper mapper)
+        {
+            _context = context;
+            _mapper = mapper;
+        }
+
+        public async Task<List<ProductDto>> Handle(
+            GetProductsQuery request, 
+            CancellationToken cancellationToken)
+        {
+            var query = _context.Products.AsQueryable();
+
+            // Apply filters
+            if (!string.IsNullOrWhiteSpace(request.SearchTerm))
+            {
+                query = query.Where(p => 
+                    p.Name.Contains(request.SearchTerm) || 
+                    p.Description.Contains(request.SearchTerm));
+            }
+
+            if (request.CategoryId.HasValue)
+            {
+                query = query.Where(p => p.CategoryId == request.CategoryId.Value);
+            }
+
+            if (request.MinPrice.HasValue)
+            {
+                query = query.Where(p => p.Price >= request.MinPrice.Value);
+            }
+
+            if (request.MaxPrice.HasValue)
+            {
+                query = query.Where(p => p.Price <= request.MaxPrice.Value);
+            }
+
+            // Pagination
+            var products = await query
+                .OrderBy(p => p.Name)
+                .Skip((request.PageNumber - 1) * request.PageSize)
+                .Take(request.PageSize)
+                .ProjectTo<ProductDto>(_mapper.ConfigurationProvider)
+                .ToListAsync(cancellationToken);
+
+            return products;
+        }
+    }
+}
+```
+
+### 4. Infrastructure Layer
+
+**ApplicationDbContext.cs**:
+```csharp
+using Microsoft.EntityFrameworkCore;
+using Domain.Entities;
+
+namespace Infrastructure.Data
+{
+    public class ApplicationDbContext : DbContext, IApplicationDbContext
+    {
+        public ApplicationDbContext(DbContextOptions<ApplicationDbContext> options)
+            : base(options)
+        {
+        }
+
+        public DbSet<Product> Products { get; set; }
+        public DbSet<Category> Categories { get; set; }
+
+        protected override void OnModelCreating(ModelBuilder modelBuilder)
+        {
+            modelBuilder.ApplyConfigurationsFromAssembly(typeof(ApplicationDbContext).Assembly);
+        }
+    }
+}
+```
+
+**ProductRepository.cs**:
+```csharp
+using Domain.Entities;
+using Domain.Interfaces;
+using Microsoft.EntityFrameworkCore;
+
+namespace Infrastructure.Repositories
+{
+    public class ProductRepository : IProductRepository
+    {
+        private readonly ApplicationDbContext _context;
+
+        public ProductRepository(ApplicationDbContext context)
+        {
+            _context = context;
+        }
+
+        public async Task<Product> GetByIdAsync(int id)
+        {
+            return await _context.Products
+                .Include(p => p.Category)
+                .FirstOrDefaultAsync(p => p.Id == id);
+        }
+
+        public async Task<List<Product>> GetAllAsync()
+        {
+            return await _context.Products
+                .Include(p => p.Category)
+                .ToListAsync();
+        }
+
+        public async Task<Product> AddAsync(Product product)
+        {
+            await _context.Products.AddAsync(product);
+            return product;
+        }
+
+        public void Update(Product product)
+        {
+            _context.Products.Update(product);
+        }
+
+        public void Delete(Product product)
+        {
+            _context.Products.Remove(product);
+        }
+    }
+}
+```
+
+### 5. API Layer
+
+**ProductsController.cs**:
+```csharp
+using MediatR;
+using Microsoft.AspNetCore.Mvc;
+using Application.Products.Commands.CreateProduct;
+using Application.Products.Queries.GetProducts;
+
+namespace API.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class ProductsController : ControllerBase
+    {
+        private readonly IMediator _mediator;
+
+        public ProductsController(IMediator mediator)
+        {
+            _mediator = mediator;
+        }
+
+        [HttpGet]
+        public async Task<ActionResult<List<ProductDto>>> GetProducts(
+            [FromQuery] GetProductsQuery query)
+        {
+            var products = await _mediator.Send(query);
+            return Ok(products);
+        }
+
+        [HttpPost]
+        public async Task<ActionResult<ProductDto>> CreateProduct(
+            CreateProductCommand command)
+        {
+            var product = await _mediator.Send(command);
+            return CreatedAtAction(
+                nameof(GetProductById), 
+                new { id = product.Id }, 
+                product);
+        }
+
+        [HttpGet("{id}")]
+        public async Task<ActionResult<ProductDto>> GetProductById(int id)
+        {
+            var product = await _mediator.Send(new GetProductByIdQuery { Id = id });
+            
+            if (product == null)
+                return NotFound();
+                
+            return Ok(product);
+        }
+    }
+}
+```
+
+## MediatR Pipeline Behaviors
+
+**ValidationBehavior.cs** - Tự động validate tất cả commands:
+```csharp
+using FluentValidation;
+using MediatR;
+
+namespace Application.Common.Behaviors
+{
+    public class ValidationBehavior<TRequest, TResponse> 
+        : IPipelineBehavior<TRequest, TResponse>
+        where TRequest : IRequest<TResponse>
+    {
+        private readonly IEnumerable<IValidator<TRequest>> _validators;
+
+        public ValidationBehavior(IEnumerable<IValidator<TRequest>> validators)
+        {
+            _validators = validators;
+        }
+
+        public async Task<TResponse> Handle(
+            TRequest request,
+            RequestHandlerDelegate<TResponse> next,
+            CancellationToken cancellationToken)
+        {
+            if (_validators.Any())
+            {
+                var context = new ValidationContext<TRequest>(request);
+
+                var validationResults = await Task.WhenAll(
+                    _validators.Select(v => v.ValidateAsync(context, cancellationToken)));
+
+                var failures = validationResults
+                    .SelectMany(r => r.Errors)
+                    .Where(f => f != null)
+                    .ToList();
+
+                if (failures.Count != 0)
+                    throw new ValidationException(failures);
+            }
+
+            return await next();
+        }
+    }
+}
+```
+
+## Dependency Injection Setup
+
+**Application Layer Registration**:
+```csharp
+using MediatR;
+using FluentValidation;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Application
+{
+    public static class DependencyInjection
+    {
+        public static IServiceCollection AddApplication(this IServiceCollection services)
+        {
+            services.AddMediatR(cfg => 
+                cfg.RegisterServicesFromAssembly(typeof(DependencyInjection).Assembly));
+
+            services.AddValidatorsFromAssembly(typeof(DependencyInjection).Assembly);
+
+            services.AddTransient(typeof(IPipelineBehavior<,>), typeof(ValidationBehavior<,>));
+
+            services.AddAutoMapper(typeof(DependencyInjection).Assembly);
+
+            return services;
+        }
+    }
+}
+```
+
+**Infrastructure Layer Registration**:
+```csharp
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+
+namespace Infrastructure
+{
+    public static class DependencyInjection
+    {
+        public static IServiceCollection AddInfrastructure(
+            this IServiceCollection services,
+            IConfiguration configuration)
+        {
+            services.AddDbContext<ApplicationDbContext>(options =>
+                options.UseSqlServer(
+                    configuration.GetConnectionString("DefaultConnection")));
+
+            services.AddScoped<IApplicationDbContext>(provider => 
+                provider.GetRequiredService<ApplicationDbContext>());
+
+            services.AddScoped<IProductRepository, ProductRepository>();
+            services.AddScoped<IUnitOfWork, UnitOfWork>();
+
+            return services;
+        }
+    }
+}
+```
+
+**Program.cs**:
+```csharp
+using Application;
+using Infrastructure;
+
+var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddApplication();
+builder.Services.AddInfrastructure(builder.Configuration);
+
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+var app = builder.Build();
+
+app.UseSwagger();
+app.UseSwaggerUI();
+app.UseHttpsRedirection();
+app.MapControllers();
+
+app.Run();
+```
+
+## Best Practices
+
+### 1. Dependencies Flow Inward
+- Domain không phụ thuộc vào gì
+- Application chỉ phụ thuộc Domain
+- Infrastructure phụ thuộc Domain + Application
+- API phụ thuộc tất cả (composition root)
+
+### 2. Use Result Pattern cho Error Handling
+```csharp
+public class Result<T>
+{
+    public bool IsSuccess { get; }
+    public T Value { get; }
+    public string Error { get; }
+    
+    public static Result<T> Success(T value) => new Result<T>(true, value, null);
+    public static Result<T> Failure(string error) => new Result<T>(false, default, error);
+}
+```
+
+### 3. Query Optimization
+- Dùng `AsNoTracking()` cho read-only queries
+- Dùng `ProjectTo<>` để chỉ select các field cần thiết
+- Pagination cho tất cả list endpoints
+
+### 4. Validation Strategy
+- FluentValidation ở Application layer
+- Domain validation trong entities (business rules)
+- Input validation ở API layer (model binding)
+
+## Common Pitfalls
+
+❌ **Đừng làm**:
+- Cho Domain phụ thuộc vào EF Core
+- Gọi DbContext trực tiếp trong Controllers
+- Mix business logic vào Infrastructure
+- Over-engineer cho dự án nhỏ
+
+✅ **Nên làm**:
+- Keep Domain pure (không dependencies)
+- Use interfaces để decouple
+- Validate ở nhiều layers khác nhau
+- Balance giữa architecture và productivity
+
+## Kết luận
+
+Clean Architecture + CQRS mang lại:
+- **Maintainability** - Code rõ ràng, dễ maintain
+- **Testability** - Dễ dàng unit test
+- **Scalability** - Dễ mở rộng features
+- **Team productivity** - Developers dễ hiểu structure
+
+Tuy có initial overhead cao hơn, nhưng với dự án trung bình đến lớn, investment này hoàn toàn xứng đáng.
+
+---
+
+**Nguồn tham khảo**:
+- Clean Architecture (Robert C. Martin)
+- Microsoft Docs - CQRS Pattern
+- MediatR Documentation
+- Dự án thực tế: Wine E-commerce System

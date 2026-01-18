@@ -1,0 +1,647 @@
+---
+title: "Authentication Flow với Access & Refresh Token trong ASP.NET Core"
+subtitle: "Triển khai JWT authentication an toàn với Refresh Token rotation"
+summary: "Hướng dẫn chi tiết cách implement JWT authentication với Access Token và Refresh Token trong ASP.NET Core. Bao gồm token rotation, httpOnly cookies, và best practices về bảo mật."
+image: "/images/gallery/horizontal-2.jpg"
+publishedAt: "2025-01-12"
+tag: "Security"
+---
+
+## Tại sao cần Refresh Token?
+
+**Access Token** thường có thời gian sống ngắn (15-30 phút) để bảo mật. Nhưng điều này tạo ra vấn đề:
+- User phải login lại liên tục → UX tệ
+- Lưu password để auto-login → Không an toàn
+
+**Refresh Token** giải quyết vấn đề này:
+- Access Token ngắn hạn → Giảm thiểu rủi ro nếu bị lộ
+- Refresh Token dài hạn → Không cần login lại
+- Có thể revoke Refresh Token → Kiểm soát sessions
+
+## Token Flow Diagram
+
+```
+Client                          Server
+  |                               |
+  |-- POST /api/auth/login ------>|
+  |   (username, password)        |
+  |                               |
+  |<-- 200 OK --------------------|
+  |   {                           |
+  |     accessToken,              |
+  |     refreshToken              |
+  |   }                           |
+  |                               |
+  |-- GET /api/products --------->|
+  |   Authorization: Bearer {AT}  |
+  |                               |
+  |<-- 200 OK --------------------|
+  |   (products data)             |
+  |                               |
+  |-- GET /api/orders ----------->|
+  |   Authorization: Bearer {AT}  |
+  |   (Access Token expired)      |
+  |                               |
+  |<-- 401 Unauthorized -----------|
+  |                               |
+  |-- POST /api/auth/refresh ---->|
+  |   { refreshToken }            |
+  |                               |
+  |<-- 200 OK --------------------|
+  |   {                           |
+  |     accessToken (new),        |
+  |     refreshToken (new)        |
+  |   }                           |
+  |                               |
+  |-- GET /api/orders (retry) --->|
+  |   Authorization: Bearer {newAT}
+  |                               |
+  |<-- 200 OK --------------------|
+```
+
+## Implementation
+
+### 1. Domain Models
+
+**RefreshToken Entity**:
+```csharp
+namespace Domain.Entities
+{
+    public class RefreshToken
+    {
+        public int Id { get; set; }
+        public string Token { get; set; }
+        public DateTime ExpiresAt { get; set; }
+        public DateTime CreatedAt { get; set; }
+        public string CreatedByIp { get; set; }
+        public DateTime? RevokedAt { get; set; }
+        public string RevokedByIp { get; set; }
+        public string ReplacedByToken { get; set; }
+        public string ReasonRevoked { get; set; }
+        
+        // Foreign key
+        public string UserId { get; set; }
+        public ApplicationUser User { get; set; }
+        
+        public bool IsExpired => DateTime.UtcNow >= ExpiresAt;
+        public bool IsRevoked => RevokedAt != null;
+        public bool IsActive => !IsRevoked && !IsExpired;
+    }
+}
+```
+
+**ApplicationUser** (extends IdentityUser):
+```csharp
+using Microsoft.AspNetCore.Identity;
+
+namespace Domain.Entities
+{
+    public class ApplicationUser : IdentityUser
+    {
+        public string FirstName { get; set; }
+        public string LastName { get; set; }
+        
+        // Navigation
+        public ICollection<RefreshToken> RefreshTokens { get; set; }
+    }
+}
+```
+
+### 2. Token Service
+
+**ITokenService Interface**:
+```csharp
+namespace Application.Common.Interfaces
+{
+    public interface ITokenService
+    {
+        string GenerateAccessToken(ApplicationUser user, IList<string> roles);
+        RefreshToken GenerateRefreshToken(string ipAddress);
+        Task<(string accessToken, RefreshToken refreshToken)> RefreshTokenAsync(
+            string token, string ipAddress);
+        Task<bool> RevokeTokenAsync(string token, string ipAddress);
+    }
+}
+```
+
+**TokenService Implementation**:
+```csharp
+using System.IdentityModel.Tokens.Jwt;
+using System.Security.Claims;
+using System.Security.Cryptography;
+using Microsoft.Extensions.Configuration;
+using Microsoft.IdentityModel.Tokens;
+using Microsoft.AspNetCore.Identity;
+
+namespace Infrastructure.Services
+{
+    public class TokenService : ITokenService
+    {
+        private readonly IConfiguration _configuration;
+        private readonly UserManager<ApplicationUser> _userManager;
+        private readonly ApplicationDbContext _context;
+
+        public TokenService(
+            IConfiguration configuration,
+            UserManager<ApplicationUser> userManager,
+            ApplicationDbContext context)
+        {
+            _configuration = configuration;
+            _userManager = userManager;
+            _context = context;
+        }
+
+        public string GenerateAccessToken(
+            ApplicationUser user, 
+            IList<string> roles)
+        {
+            var claims = new List<Claim>
+            {
+                new Claim(ClaimTypes.NameIdentifier, user.Id),
+                new Claim(ClaimTypes.Name, user.UserName),
+                new Claim(ClaimTypes.Email, user.Email),
+                new Claim("firstName", user.FirstName ?? ""),
+                new Claim("lastName", user.LastName ?? "")
+            };
+
+            // Add role claims
+            foreach (var role in roles)
+            {
+                claims.Add(new Claim(ClaimTypes.Role, role));
+            }
+
+            var key = new SymmetricSecurityKey(
+                Encoding.UTF8.GetBytes(_configuration["Jwt:Secret"]));
+
+            var credentials = new SigningCredentials(
+                key, SecurityAlgorithms.HmacSha256);
+
+            var tokenDescriptor = new SecurityTokenDescriptor
+            {
+                Subject = new ClaimsIdentity(claims),
+                Expires = DateTime.UtcNow.AddMinutes(15), // Short-lived
+                SigningCredentials = credentials,
+                Issuer = _configuration["Jwt:Issuer"],
+                Audience = _configuration["Jwt:Audience"]
+            };
+
+            var tokenHandler = new JwtSecurityTokenHandler();
+            var token = tokenHandler.CreateToken(tokenDescriptor);
+
+            return tokenHandler.WriteToken(token);
+        }
+
+        public RefreshToken GenerateRefreshToken(string ipAddress)
+        {
+            // Generate cryptographically strong random token
+            var randomBytes = new byte[64];
+            using var rng = RandomNumberGenerator.Create();
+            rng.GetBytes(randomBytes);
+
+            var refreshToken = new RefreshToken
+            {
+                Token = Convert.ToBase64String(randomBytes),
+                ExpiresAt = DateTime.UtcNow.AddDays(7), // Long-lived
+                CreatedAt = DateTime.UtcNow,
+                CreatedByIp = ipAddress
+            };
+
+            return refreshToken;
+        }
+
+        public async Task<(string accessToken, RefreshToken refreshToken)> 
+            RefreshTokenAsync(string token, string ipAddress)
+        {
+            var user = await _context.Users
+                .Include(u => u.RefreshTokens)
+                .SingleOrDefaultAsync(u => u.RefreshTokens.Any(t => t.Token == token));
+
+            if (user == null)
+                throw new UnauthorizedAccessException("Invalid token");
+
+            var refreshToken = user.RefreshTokens.Single(x => x.Token == token);
+
+            if (!refreshToken.IsActive)
+                throw new UnauthorizedAccessException("Invalid token");
+
+            // Replace old refresh token with new one (rotate)
+            var newRefreshToken = RotateRefreshToken(refreshToken, ipAddress);
+            user.RefreshTokens.Add(newRefreshToken);
+
+            // Remove old refresh tokens from user
+            RemoveOldRefreshTokens(user);
+
+            await _context.SaveChangesAsync();
+
+            // Generate new access token
+            var roles = await _userManager.GetRolesAsync(user);
+            var accessToken = GenerateAccessToken(user, roles);
+
+            return (accessToken, newRefreshToken);
+        }
+
+        public async Task<bool> RevokeTokenAsync(string token, string ipAddress)
+        {
+            var user = await _context.Users
+                .Include(u => u.RefreshTokens)
+                .SingleOrDefaultAsync(u => u.RefreshTokens.Any(t => t.Token == token));
+
+            if (user == null)
+                return false;
+
+            var refreshToken = user.RefreshTokens.Single(x => x.Token == token);
+
+            if (!refreshToken.IsActive)
+                return false;
+
+            // Revoke token
+            RevokeRefreshToken(refreshToken, ipAddress, "Revoked by user");
+
+            await _context.SaveChangesAsync();
+
+            return true;
+        }
+
+        // Helper methods
+        private RefreshToken RotateRefreshToken(
+            RefreshToken refreshToken, 
+            string ipAddress)
+        {
+            var newRefreshToken = GenerateRefreshToken(ipAddress);
+            RevokeRefreshToken(refreshToken, ipAddress, 
+                "Replaced by new token", newRefreshToken.Token);
+
+            return newRefreshToken;
+        }
+
+        private void RevokeRefreshToken(
+            RefreshToken token, 
+            string ipAddress, 
+            string reason = null, 
+            string replacedByToken = null)
+        {
+            token.RevokedAt = DateTime.UtcNow;
+            token.RevokedByIp = ipAddress;
+            token.ReasonRevoked = reason;
+            token.ReplacedByToken = replacedByToken;
+        }
+
+        private void RemoveOldRefreshTokens(ApplicationUser user)
+        {
+            // Remove refresh tokens older than 30 days
+            user.RefreshTokens.RemoveAll(x =>
+                !x.IsActive &&
+                x.CreatedAt.AddDays(30) <= DateTime.UtcNow);
+        }
+    }
+}
+```
+
+### 3. Authentication Controller
+
+**AuthController.cs**:
+```csharp
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Identity;
+using Application.Common.Interfaces;
+
+namespace API.Controllers
+{
+    [ApiController]
+    [Route("api/[controller]")]
+    public class AuthController : ControllerBase
+    {
+        private readonly UserManager<ApplicationUser> _userManager;
+        private readonly SignInManager<ApplicationUser> _signInManager;
+        private readonly ITokenService _tokenService;
+
+        public AuthController(
+            UserManager<ApplicationUser> userManager,
+            SignInManager<ApplicationUser> signInManager,
+            ITokenService tokenService)
+        {
+            _userManager = userManager;
+            _signInManager = signInManager;
+            _tokenService = tokenService;
+        }
+
+        [HttpPost("login")]
+        public async Task<ActionResult<AuthResponse>> Login(LoginRequest request)
+        {
+            var user = await _userManager.FindByNameAsync(request.Username);
+            
+            if (user == null)
+                return Unauthorized(new { message = "Invalid credentials" });
+
+            var result = await _signInManager.CheckPasswordSignInAsync(
+                user, request.Password, lockoutOnFailure: true);
+
+            if (!result.Succeeded)
+                return Unauthorized(new { message = "Invalid credentials" });
+
+            // Generate tokens
+            var roles = await _userManager.GetRolesAsync(user);
+            var accessToken = _tokenService.GenerateAccessToken(user, roles);
+            var refreshToken = _tokenService.GenerateRefreshToken(GetIpAddress());
+
+            // Save refresh token
+            user.RefreshTokens ??= new List<RefreshToken>();
+            user.RefreshTokens.Add(refreshToken);
+            await _userManager.UpdateAsync(user);
+
+            // Set refresh token in httpOnly cookie
+            SetRefreshTokenCookie(refreshToken.Token);
+
+            return Ok(new AuthResponse
+            {
+                AccessToken = accessToken,
+                Username = user.UserName,
+                Email = user.Email,
+                Roles = roles.ToList()
+            });
+        }
+
+        [HttpPost("refresh-token")]
+        public async Task<ActionResult<AuthResponse>> RefreshToken()
+        {
+            var refreshToken = Request.Cookies["refreshToken"];
+
+            if (string.IsNullOrEmpty(refreshToken))
+                return Unauthorized(new { message = "Refresh token required" });
+
+            try
+            {
+                var (accessToken, newRefreshToken) = 
+                    await _tokenService.RefreshTokenAsync(refreshToken, GetIpAddress());
+
+                // Set new refresh token in cookie
+                SetRefreshTokenCookie(newRefreshToken.Token);
+
+                // Get user info
+                var user = await _userManager.Users
+                    .Include(u => u.RefreshTokens)
+                    .FirstOrDefaultAsync(u => 
+                        u.RefreshTokens.Any(t => t.Token == newRefreshToken.Token));
+
+                var roles = await _userManager.GetRolesAsync(user);
+
+                return Ok(new AuthResponse
+                {
+                    AccessToken = accessToken,
+                    Username = user.UserName,
+                    Email = user.Email,
+                    Roles = roles.ToList()
+                });
+            }
+            catch (UnauthorizedAccessException ex)
+            {
+                return Unauthorized(new { message = ex.Message });
+            }
+        }
+
+        [HttpPost("revoke-token")]
+        public async Task<IActionResult> RevokeToken()
+        {
+            var token = Request.Cookies["refreshToken"];
+
+            if (string.IsNullOrEmpty(token))
+                return BadRequest(new { message = "Token required" });
+
+            var result = await _tokenService.RevokeTokenAsync(token, GetIpAddress());
+
+            if (!result)
+                return NotFound(new { message = "Token not found" });
+
+            return Ok(new { message = "Token revoked" });
+        }
+
+        // Helper methods
+        private void SetRefreshTokenCookie(string token)
+        {
+            var cookieOptions = new CookieOptions
+            {
+                HttpOnly = true,
+                Expires = DateTime.UtcNow.AddDays(7),
+                Secure = true, // Requires HTTPS
+                SameSite = SameSiteMode.Strict,
+                IsEssential = true
+            };
+
+            Response.Cookies.Append("refreshToken", token, cookieOptions);
+        }
+
+        private string GetIpAddress()
+        {
+            if (Request.Headers.ContainsKey("X-Forwarded-For"))
+                return Request.Headers["X-Forwarded-For"];
+            else
+                return HttpContext.Connection.RemoteIpAddress?.ToString();
+        }
+    }
+}
+```
+
+### 4. JWT Configuration in Program.cs
+
+```csharp
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.IdentityModel.Tokens;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Add Authentication & Authorization
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.RequireHttpsMetadata = true;
+    options.SaveToken = true;
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuerSigningKey = true,
+        IssuerSigningKey = new SymmetricSecurityKey(
+            Encoding.UTF8.GetBytes(builder.Configuration["Jwt:Secret"])),
+        ValidateIssuer = true,
+        ValidIssuer = builder.Configuration["Jwt:Issuer"],
+        ValidateAudience = true,
+        ValidAudience = builder.Configuration["Jwt:Audience"],
+        ValidateLifetime = true,
+        ClockSkew = TimeSpan.Zero // No tolerance for expiration
+    };
+});
+
+builder.Services.AddAuthorization();
+
+var app = builder.Build();
+
+app.UseAuthentication();
+app.UseAuthorization();
+
+app.MapControllers();
+app.Run();
+```
+
+### 5. appsettings.json
+
+```json
+{
+  "Jwt": {
+    "Secret": "your-256-bit-secret-key-keep-this-very-secure",
+    "Issuer": "YourAppName",
+    "Audience": "YourAppName",
+    "AccessTokenExpirationMinutes": 15,
+    "RefreshTokenExpirationDays": 7
+  }
+}
+```
+
+## Frontend Integration (Next.js + SWR)
+
+**Custom Hook useAuth**:
+```typescript
+import useSWR from 'swr';
+import axios from 'axios';
+
+export function useAuth() {
+  const { data: user, error, mutate } = useSWR('/api/auth/user', fetcher);
+
+  const login = async (username: string, password: string) => {
+    const response = await axios.post('/api/auth/login', {
+      username,
+      password
+    }, {
+      withCredentials: true // Important for cookies
+    });
+
+    mutate(response.data);
+    return response.data;
+  };
+
+  const logout = async () => {
+    await axios.post('/api/auth/revoke-token', {}, {
+      withCredentials: true
+    });
+
+    mutate(null);
+  };
+
+  return {
+    user,
+    isLoading: !error && !user,
+    isError: error,
+    login,
+    logout
+  };
+}
+```
+
+**Axios Interceptor for Auto Refresh**:
+```typescript
+import axios from 'axios';
+
+axios.interceptors.response.use(
+  response => response,
+  async error => {
+    const originalRequest = error.config;
+
+    // If 401 and not already retried
+    if (error.response?.status === 401 && !originalRequest._retry) {
+      originalRequest._retry = true;
+
+      try {
+        // Try to refresh token
+        await axios.post('/api/auth/refresh-token', {}, {
+          withCredentials: true
+        });
+
+        // Retry original request
+        return axios(originalRequest);
+      } catch (refreshError) {
+        // Refresh failed, redirect to login
+        window.location.href = '/login';
+        return Promise.reject(refreshError);
+      }
+    }
+
+    return Promise.reject(error);
+  }
+);
+```
+
+## Security Best Practices
+
+### 1. httpOnly Cookies vs localStorage
+
+**❌ KHÔNG nên**: Lưu tokens trong localStorage
+```javascript
+// XSS attack có thể steal token
+localStorage.setItem('accessToken', token);
+```
+
+**✅ NÊN**: Dùng httpOnly cookies cho Refresh Token
+```csharp
+// JavaScript không thể access cookie này
+Response.Cookies.Append("refreshToken", token, new CookieOptions
+{
+    HttpOnly = true,
+    Secure = true,
+    SameSite = SameSiteMode.Strict
+});
+```
+
+### 2. Token Rotation
+
+Mỗi lần refresh → tạo token mới và revoke token cũ:
+- Giảm thiểu replay attacks
+- Dễ tracking token family
+- Phát hiện token theft
+
+### 3. CSRF Protection
+
+Với httpOnly cookies, cần CSRF protection:
+```csharp
+builder.Services.AddAntiforgery(options =>
+{
+    options.HeaderName = "X-CSRF-TOKEN";
+});
+```
+
+### 4. Rate Limiting
+
+Giới hạn login attempts:
+```csharp
+builder.Services.AddRateLimiter(options =>
+{
+    options.AddFixedWindowLimiter("auth", opt =>
+    {
+        opt.Window = TimeSpan.FromMinutes(1);
+        opt.PermitLimit = 5; // 5 requests per minute
+    });
+});
+```
+
+## Common Issues & Solutions
+
+### Issue 1: Token không refresh tự động
+**Giải pháp**: Implement axios interceptor để tự động retry khi 401
+
+### Issue 2: Cookie không được set (cross-origin)
+**Giải pháp**: 
+- Enable CORS with credentials
+- SameSite=None + Secure=true cho production
+
+### Issue 3: Concurrent requests gây multiple refresh calls
+**Giải pháp**: Debounce refresh token calls, queue pending requests
+
+## Kết luận
+
+JWT Authentication với Refresh Token cung cấp:
+- ✅ **Security**: Short-lived access token
+- ✅ **UX**: Không cần login lại liên tục
+- ✅ **Control**: Có thể revoke sessions
+- ✅ **Scalability**: Stateless authentication
+
+Kết hợp với httpOnly cookies và token rotation, đây là giải pháp authentication hiện đại và an toàn cho web applications.

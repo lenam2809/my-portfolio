@@ -1,0 +1,189 @@
+---
+title: "ClothesStore E-commerce"
+subtitle: "Modern fashion e-commerce with CQRS and Refresh Token authentication"
+summary: ".NET 8 API with Next.js 13 frontend implementing CQRS + Repository patterns, secure refresh token authentication, and modern UI/UX."
+image: "/images/gallery/horizontal-2.jpg"
+publishedAt: "2024-11-20"
+tag: "ASP.NET Core"
+---
+
+## Overview
+
+A modern fashion e-commerce platform demonstrating the combination of CQRS and Repository patterns with secure authentication mechanisms. This project showcases practical implementation of advanced architectural patterns in a real-world scenario.
+
+## Technology Stack
+
+### Backend
+- **.NET 8 API** - Latest .NET framework
+- **CQRS Pattern** - Command Query segregation
+- **Repository Pattern** - Data access abstraction
+- **ASP.NET Identity** - Authentication infrastructure
+- **JWT with Refresh Tokens** - Secure token-based auth
+- **Entity Framework Core** - ORM
+- **SQL Server** - Database
+
+### Frontend
+- **Next.js 13** - React framework
+- **TypeScript** - Type safety
+- **Tailwind CSS** - Styling
+- **SWR** - Data fetching
+- **Axios** - HTTP client
+
+## Key Features
+
+### 1. Hybrid Architecture: CQRS + Repository
+
+The project uniquely combines two patterns:
+
+**CQRS for Business Logic**:
+- Commands for write operations (Create, Update, Delete)
+- Queries for read operations (Get, List, Search)
+- Clear separation of concerns
+- Optimized query performance
+
+**Repository for Data Access**:
+- Generic repository pattern
+- Unit of Work implementation
+- Transaction management
+- Data access abstraction
+
+### 2. Advanced Authentication Flow
+
+**Refresh Token Implementation**:
+```
+1. User logs in → Receives Access Token + Refresh Token
+2. Access Token (short-lived: 15 minutes)
+3. Refresh Token (long-lived: 7 days)
+4. Automatic token refresh before expiration
+5. Refresh token rotation for security
+```
+
+**Security Features**:
+- httpOnly cookies for token storage
+- Refresh token family tracking
+- Automatic token revocation on suspicious activity
+- CSRF protection
+
+### 3. Product Management
+- Browse fashion items by category
+- Advanced filtering (size, color, price, brand)
+- Product search functionality
+- Shopping cart management
+- Order processing
+
+### 4. User Features
+- User registration and login
+- Profile management
+- Order history
+- Wishlist functionality
+- Address management
+
+## Architecture Details
+
+### CQRS Implementation
+
+**Commands** (Write Operations):
+```csharp
+public class CreateProductCommand : IRequest<Result<ProductDto>>
+{
+    public string Name { get; set; }
+    public decimal Price { get; set; }
+    // ... other properties
+}
+
+public class CreateProductCommandHandler : IRequestHandler<CreateProductCommand, Result<ProductDto>>
+{
+    // Handler implementation
+}
+```
+
+**Queries** (Read Operations):
+```csharp
+public class GetProductsQuery : IRequest<Result<PagedList<ProductDto>>>
+{
+    public ProductFilter Filter { get; set; }
+    public PaginationParams Pagination { get; set; }
+}
+```
+
+### Repository Pattern
+
+**Generic Repository**:
+- Common CRUD operations
+- Async/await throughout
+- IQueryable support for flexible queries
+
+**Unit of Work**:
+- Transaction coordination
+- Change tracking
+- Commit/Rollback support
+
+### Authentication Architecture
+
+**Token Service**:
+- JWT generation
+- Refresh token creation and validation
+- Token revocation
+- Expiration handling
+
+**Middleware**:
+- JWT validation middleware
+- Refresh token middleware
+- Authorization policy enforcement
+
+## Technical Challenges & Solutions
+
+### Challenge 1: CQRS with Repository Pattern
+**Issue**: Potential redundancy between patterns  
+**Solution**: Used Repository for data access layer only, CQRS for business logic layer. Clear boundaries prevented overlap.
+
+### Challenge 2: Refresh Token Security
+**Issue**: Secure storage and rotation  
+**Solution**: Implemented token families with one-time use tokens and automatic rotation on refresh.
+
+### Challenge 3: Frontend State Management
+**Issue**: Complex auth state across pages  
+**Solution**: Custom React hooks with SWR for global auth state and automatic revalidation.
+
+## Code Quality Practices
+
+- **Dependency Injection** throughout
+- **Clean Code principles** - SOLID
+- **Async/Await** for all I/O operations
+- **Error handling** with Result pattern
+- **Input validation** with FluentValidation
+- **Unit tests** for business logic
+- **Integration tests** for API endpoints
+
+## Performance Optimizations
+
+- Efficient database queries with EF Core
+- Pagination for large data sets
+- Client-side caching with SWR
+- Optimistic UI updates
+- Image optimization and lazy loading
+
+## Security Considerations
+
+- Protection against XSS attacks
+- CSRF token validation  
+- SQL injection prevention (parameterized queries)
+- Rate limiting on authentication endpoints
+- Secure password hashing (ASP.NET Identity)
+
+## Lessons Learned
+
+1. **Pattern Combination**: CQRS + Repository can work together when boundaries are clear
+2. **Token Management**: Refresh tokens significantly improve UX while maintaining security
+3. **Type Safety**: TypeScript + Zod validation catches many bugs early
+4. **SWR Benefits**: Automatic revalidation and caching simplify state management
+5. **Clean Architecture**: Pays dividends in maintainability and testing
+
+## Future Improvements
+
+- Add Redis for caching and session management
+- Implement event sourcing for audit trails
+- Add GraphQL API alongside REST
+- Enhance admin dashboard
+- Implement real-time inventory updates with SignalR
+- Add payment gateway integration
