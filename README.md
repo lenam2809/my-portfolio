@@ -5,11 +5,9 @@
 
 Website portfolio cá nhân giới thiệu công việc của mình với vai trò .NET Backend/Fullstack Developer. Hỗ trợ song ngữ (Tiếng Việt/English), blog kỹ thuật và showcase các dự án.
 
-````carousel
 ![Giao diện Light Mode - Tiếng Anh](public/images/og/homepage.png)
-<!-- slide -->
+
 ![Giao diện Dark Mode - Tiếng Việt](public/images/og/homepage-dark.png)
-````
 
 ## Giới Thiệu Portfolio
 
