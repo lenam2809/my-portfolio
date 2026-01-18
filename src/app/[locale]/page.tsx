@@ -11,7 +11,8 @@ import {
   Meta,
   Line,
 } from "@once-ui-system/core";
-import { home, about, person, baseURL, routes } from "@/resources";
+import { home, about, person } from "@/resources/content";
+import { baseURL, routes } from "@/resources/once-ui.config";
 import { Mailchimp, SublineText } from "@/components";
 import { Projects } from "@/components/work/Projects";
 import { Posts } from "@/components/blog/Posts";

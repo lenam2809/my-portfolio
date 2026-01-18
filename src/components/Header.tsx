@@ -7,7 +7,8 @@ import { useEffect, useState, useTransition } from "react";
 import { Fade, Flex, Line, Row, ToggleButton, Column, Avatar, Text, Icon, IconButton } from "@once-ui-system/core";
 import { useParams } from "next/navigation";
 
-import { routes, display, person, about, blog, work, gallery, social } from "@/resources";
+import { routes, display } from "@/resources/once-ui.config";
+import { person, about, blog, work, gallery, social } from "@/resources/content";
 import { ThemeToggle } from "./ThemeToggle";
 import styles from "./Header.module.scss";
 

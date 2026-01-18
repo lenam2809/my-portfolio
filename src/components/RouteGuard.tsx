@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { usePathname } from "@/i18n/routing";
-import { routes, protectedRoutes } from "@/resources";
+import { routes, protectedRoutes } from "@/resources/once-ui.config";
 import { Flex, Spinner, Button, Heading, Column, PasswordInput } from "@once-ui-system/core";
 import NotFound from "@/app/[locale]/not-found";
 
